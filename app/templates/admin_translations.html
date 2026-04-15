@@ -1,0 +1,294 @@
+﻿{% extends "base.html" %}
+{% block content %}
+<section class="panel">
+  <h1>Admin: Rezept-Übersetzungen</h1>
+  <p><a href="/admin">Zurück zum Admin-Dashboard</a></p>
+  {% if message %}
+  <p class="meta"><strong>{{ message }}</strong></p>
+  {% endif %}
+  {% if error %}
+  <p class="error"><strong>{{ error }}</strong></p>
+  {% endif %}
+</section>
+
+<section class="panel">
+  <h2>Konfiguration prüfen</h2>
+  <table>
+    <tbody>
+      <tr>
+        <th>Provider</th>
+        <td>{{ config_status.provider }}</td>
+      </tr>
+      <tr>
+        <th>TRANSLATEAPI_ENABLED</th>
+        <td>{{ "true" if config_status.enabled else "false" }}</td>
+      </tr>
+      <tr>
+        <th>TRANSLATEAPI_KEY gesetzt</th>
+        <td>{{ "ja" if config_status.key_set else "nein" }}</td>
+      </tr>
+      <tr>
+        <th>TRANSLATE_TARGET_LANGS</th>
+        <td>{{ config_status.target_langs|join(", ") if config_status.target_langs else "-" }}</td>
+      </tr>
+      <tr>
+        <th>TRANSLATE_AUTO_ON_PUBLISH</th>
+        <td>{{ "true" if config_status.auto_on_publish else "false" }}</td>
+      </tr>
+      <tr>
+        <th>TRANSLATE_LAZY_ON_VIEW</th>
+        <td>{{ "true" if config_status.lazy_on_view else "false" }}</td>
+      </tr>
+      <tr>
+        <th>Bereit</th>
+        <td>{{ "ja" if config_status.ready else "nein" }}</td>
+      </tr>
+      <tr>
+        <th>Letzter Fehler</th>
+        <td>{{ last_error or "-" }}</td>
+      </tr>
+    </tbody>
+  </table>
+  <details>
+    <summary>ENV Beispiel anzeigen</summary>
+    <pre>{{ env_snippet }}</pre>
+  </details>
+</section>
+
+<section class="panel">
+  <h2>Testübersetzung</h2>
+  <p class="meta">Der Test schreibt keine Rezeptdaten in die Datenbank.</p>
+  <form method="post" action="/admin/translations/test" class="stack">
+    <p class="meta">Testtext: "{{ test_text }}"</p>
+    <button type="submit" class="btn-primary">Testübersetzung starten</button>
+  </form>
+  {% if test_result %}
+  <div class="stack">
+    <p class="meta"><strong>Quelle:</strong> {{ test_result.source_text }}</p>
+    <table>
+      <thead>
+        <tr>
+          <th>Sprache</th>
+          <th>Ergebnis</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in test_result.translations %}
+        <tr>
+          <td>{{ item.language }}</td>
+          <td>{{ item.text }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</section>
+
+<section class="panel">
+  <h2>Status</h2>
+  <p class="meta">Translate API aktiv: {{ "Ja" if translateapi_enabled else "Nein" }}</p>
+  <p class="meta">Auto auf Publish: {{ "Ja" if translate_auto_on_publish else "Nein" }}</p>
+  <p class="meta">Veröffentlichte Rezepte: {{ stats.published_recipes }}</p>
+  <p class="meta">Zielsprachen: {{ stats.target_languages|join(", ") if stats.target_languages else "-" }}</p>
+  <p class="meta">Fehlende Übersetzungen: {{ stats.missing_translations }}</p>
+  <p class="meta">Stale Übersetzungen: {{ stats.stale_translations }}</p>
+</section>
+
+<section class="panel">
+  <h2>Deutsch-Qualitätsprüfung</h2>
+  <p class="meta">Scanned de rows: {{ de_audit.scanned_count }}</p>
+  <p class="meta">Suspect de rows: {{ de_audit.suspect_count }}</p>
+  <p class="meta">Flagged changes this run: {{ de_audit.flagged_count }}</p>
+  <div class="actions">
+    <form method="get" action="/admin/translations/audit-de" class="inline">
+      <input type="number" name="limit" min="1" max="500" value="50">
+      <button type="submit" class="btn-secondary">Deutsch-Übersetzungen prüfen (Audit)</button>
+    </form>
+  </div>
+  <form method="post" action="/admin/translations/repair-de" class="stack">
+    <label>Limit für Repair
+      <input type="number" name="limit" min="1" max="500" value="50">
+    </label>
+    <label class="inline">
+      <input type="checkbox" name="dry_run" value="1">
+      Dry-Run (nur anzeigen, nichts speichern)
+    </label>
+    <div class="actions">
+      <button type="submit" class="btn-primary">Deutsch-Übersetzungen reparieren (Force Refresh)</button>
+    </div>
+  </form>
+  {% if de_repair_report %}
+  <p class="meta">Repair candidate: {{ de_repair_report.candidate_count }}</p>
+  <p class="meta">Repair updated: {{ de_repair_report.updated_count }}</p>
+  <p class="meta">Repair skipped: {{ de_repair_report.skipped_count }}</p>
+  <p class="meta">Repair errors: {{ de_repair_report.error_count }}</p>
+  {% if de_repair_report.errors %}
+  <ul>
+    {% for item in de_repair_report.errors %}
+    <li>{{ item }}</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+  {% endif %}
+  {% if de_audit.items %}
+  <table>
+    <thead>
+      <tr>
+        <th>Recipe</th>
+        <th>Translation ID</th>
+        <th>Reason</th>
+        <th>EN Score</th>
+        <th>DE Score</th>
+        <th>Markers</th>
+        <th>Title Preview</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in de_audit.items %}
+      <tr>
+        <td><a href="/recipes/{{ item.recipe_id }}" target="_blank">{{ item.recipe_title }}</a></td>
+        <td>{{ item.translation_id }}</td>
+        <td>{{ item.reason }}</td>
+        <td>{{ "%.3f"|format(item.english_score) }}</td>
+        <td>{{ "%.3f"|format(item.german_score) }}</td>
+        <td>{{ item.marker_hits }}</td>
+        <td>{{ item.title_preview }}</td>
+      </tr>
+      <tr>
+        <td colspan="7"><span class="meta">{{ item.instructions_preview }}</span></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="meta">Keine suspect de-Übersetzungen erkannt.</p>
+  {% endif %}
+</section>
+
+<section class="panel">
+  <h2>Neue Rezepte: Übersetzungs-Warteschlange</h2>
+  <p class="meta">Ähnlich zur Moderation: hier kannst du neue Uploads gezielt übersetzen.</p>
+  <p class="meta">Einträge in Queue: {{ queue_count }}</p>
+  <form method="post" action="/admin/translations/queue/run" class="stack">
+    <label>Max Rezepte aus Queue
+      <input type="number" name="limit" min="1" value="10">
+    </label>
+    <div class="actions">
+      <button type="submit" name="mode" value="missing" class="btn-primary">Neueste fehlende übersetzen</button>
+      <button type="submit" name="mode" value="stale" class="btn-secondary">Neueste stale übersetzen</button>
+    </div>
+  </form>
+  {% if queue_items %}
+  <table>
+    <thead>
+      <tr>
+        <th>Rezept</th>
+        <th>Erstellt</th>
+        <th>Fehlend</th>
+        <th>Stale</th>
+        <th>Aktion</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in queue_items %}
+      <tr>
+        <td><a href="/recipes/{{ item.recipe_id }}" target="_blank">{{ item.title }}</a> <span class="meta">#{{ item.recipe_id }}</span></td>
+        <td>{{ item.created_at|datetime_de }}</td>
+        <td>{{ item.missing_languages|join(", ") if item.missing_languages else "-" }}</td>
+        <td>{{ item.stale_languages|join(", ") if item.stale_languages else "-" }}</td>
+        <td>
+          <form method="post" action="/admin/translations/recipes/{{ item.recipe_id }}/run" class="inline">
+            <input type="hidden" name="mode" value="{% if item.missing_languages %}missing{% else %}stale{% endif %}">
+            <button type="submit" class="btn-secondary">Jetzt übersetzen</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="meta">Keine neuen Einträge in der Übersetzungs-Warteschlange.</p>
+  {% endif %}
+</section>
+
+<section class="panel">
+  <h2>Übersetzungslauf starten</h2>
+  <form method="post" action="/admin/translations/run" class="stack">
+    <label>Max Rezepte pro Run
+      <input type="number" name="limit" min="1" value="{{ default_limit }}">
+    </label>
+    <div class="actions">
+      <button type="submit" name="mode" value="missing" class="btn-primary">Übersetze fehlende</button>
+      <button type="submit" name="mode" value="stale" class="btn-secondary">Übersetze stale</button>
+    </div>
+    <p class="meta">Für suspect DE rows: nutze den Force-Refresh in der Deutsch-Qualitätsprüfung oben.</p>
+  </form>
+</section>
+
+<section class="panel">
+  <h2>TranslateAPI Batch (asynchron)</h2>
+  <p class="meta">Batch Endpoint: POST /translate/batch/</p>
+  <p class="meta">Worker Endpoint: GET /jobs/{job_id}/</p>
+  <p class="meta">Polling-Intervall: {{ translateapi_poll_interval_seconds }}s</p>
+  <p class="meta">Max Polls: {{ translateapi_max_polls }}</p>
+  <form method="post" action="/admin/translations/batch/start" class="stack">
+    <label>Max Rezepte pro Batch
+      <input type="number" name="limit" min="1" value="{{ default_limit }}">
+    </label>
+    <div class="actions">
+      <button type="submit" name="mode" value="missing" class="btn-primary">Batch fehlende starten</button>
+      <button type="submit" name="mode" value="stale" class="btn-secondary">Batch stale starten</button>
+    </div>
+  </form>
+  <p class="meta">Worker-Command: <code>py -m tools.translation_worker --job-id &lt;JOB_ID&gt;</code></p>
+</section>
+
+{% if report %}
+<section class="panel">
+  <h2>Letzter Lauf</h2>
+  <p class="meta">Modus: {{ report.mode }}</p>
+  <p class="meta">Verarbeitete Rezepte: {{ report.processed_recipes }}</p>
+  <p class="meta">Neu erstellt: {{ report.created }}</p>
+  <p class="meta">Aktualisiert: {{ report.updated }}</p>
+  <p class="meta">Übersprungen: {{ report.skipped }}</p>
+  <p class="meta">Fehler: {{ report.errors_count }}</p>
+</section>
+{% endif %}
+
+<section class="panel">
+  <h2>Batch-Job Status</h2>
+  {% if jobs %}
+  <table>
+    <thead>
+      <tr>
+        <th>Job</th>
+        <th>Status</th>
+        <th>Modus</th>
+        <th>Progress</th>
+        <th>Erstellt</th>
+        <th>Aktualisiert</th>
+        <th>Fehler</th>
+        <th>Updated</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for job in jobs %}
+      <tr>
+        <td><code>{{ job.external_job_id }}</code></td>
+        <td>{{ job.status }}</td>
+        <td>{{ job.mode }}</td>
+        <td>{{ job.completed_items }} / {{ job.total_items }}</td>
+        <td>{{ job.created_items }}</td>
+        <td>{{ job.updated_items }}</td>
+        <td>{{ job.error_count }}</td>
+        <td>{{ job.updated_at|datetime_de }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="meta">Noch keine Batch-Jobs vorhanden.</p>
+  {% endif %}
+</section>
+{% endblock %}

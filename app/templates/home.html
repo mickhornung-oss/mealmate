@@ -1,0 +1,74 @@
+﻿{% extends "base.html" %}
+{% block content %}
+<section class="page-grid">
+  <aside class="sidebar">
+    <form class="sidebar-card sidebar-form sidebar-compact" hx-get="/" hx-target="#recipe-list" hx-push-url="true" aria-label="Filter">
+      <div class="sidebar-actions-top">
+        <h2 class="sidebar-title">{{ t("discover.title") }}</h2>
+        <button type="submit" class="btn btn-primary btn-compact sidebar-apply">{{ t("discover.filter.apply") }}</button>
+      </div>
+      <div class="sidebar-content">
+        <label class="field">
+          <span class="field-label">{{ t("discover.filter.title_contains") }}</span>
+          <input type="text" name="title" value="{{ title }}" placeholder="{{ t('discover.filter.title_contains') }}">
+        </label>
+        <label class="field">
+          <span class="field-label">{{ t("discover.filter.category") }}</span>
+          <select name="category">
+            <option value="">{{ t("home.all_categories") }}</option>
+            {% for option in category_options %}
+            <option value="{{ option }}" {% if category == option %}selected{% endif %}>{{ option }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label class="field">
+          <span class="field-label">{{ t("discover.filter.difficulty") }}</span>
+          <select name="difficulty">
+            <option value="">{{ t("discover.filter.difficulty") }}</option>
+            <option value="easy" {% if difficulty == "easy" %}selected{% endif %}>{{ t("difficulty.easy") }}</option>
+            <option value="medium" {% if difficulty == "medium" %}selected{% endif %}>{{ t("difficulty.medium") }}</option>
+            <option value="hard" {% if difficulty == "hard" %}selected{% endif %}>{{ t("difficulty.hard") }}</option>
+          </select>
+        </label>
+        <label class="field">
+          <span class="field-label">{{ t("discover.filter.ingredient") }}</span>
+          <input type="text" name="ingredient" value="{{ ingredient }}" placeholder="{{ t('discover.filter.ingredient') }}">
+        </label>
+        <div class="sidebar-row-two">
+          <label class="field">
+            <span class="field-label">Sort</span>
+            <select name="sort">
+              <option value="date" {% if sort == "date" %}selected{% endif %}>{{ t("discover.sort.newest") }}</option>
+              <option value="prep_time" {% if sort == "prep_time" %}selected{% endif %}>{{ t("discover.sort.prep_time") }}</option>
+              <option value="avg_rating" {% if sort == "avg_rating" %}selected{% endif %}>{{ t("discover.sort.rating_desc") }}</option>
+            </select>
+          </label>
+          <label class="field">
+            <span class="field-label">{{ t("home.per_page") }}</span>
+            <select name="per_page">
+              {% for option in per_page_options %}
+              <option value="{{ option }}" {% if per_page == option %}selected{% endif %}>{{ option }}</option>
+              {% endfor %}
+            </select>
+          </label>
+        </div>
+        <label class="field">
+          <span class="field-label">{{ t("discover.filter.image") }}</span>
+          <select name="image_filter">
+            <option value="">{{ t("discover.filter.all_images") }}</option>
+            <option value="with_image" {% if image_filter == "with_image" %}selected{% endif %}>{{ t("discover.filter.with_image") }}</option>
+          </select>
+        </label>
+      </div>
+      <div class="sidebar-actions-bottom">
+        <a href="/" class="btn btn-primary btn-compact sidebar-reset">Zurücksetzen</a>
+      </div>
+    </form>
+  </aside>
+  <section class="content" aria-live="polite">
+    <section id="recipe-list" class="recipe-list-shell">
+      {% include "partials/recipe_list.html" %}
+    </section>
+  </section>
+</section>
+{% endblock %}

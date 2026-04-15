@@ -1,0 +1,79 @@
+﻿{% extends "base.html" %}
+{% block content %}
+<section class="panel">
+  <h1>{{ t("image_change.admin_title") }}</h1>
+  <form method="get" action="/admin/image-change-requests" class="inline">
+    <label>{{ t("submission.status_filter") }}
+      <select name="status_filter">
+        <option value="pending" {% if status_filter == "pending" %}selected{% endif %}>{{ t("submission.status_pending") }}</option>
+        <option value="approved" {% if status_filter == "approved" %}selected{% endif %}>{{ t("submission.status_approved") }}</option>
+        <option value="rejected" {% if status_filter == "rejected" %}selected{% endif %}>{{ t("submission.status_rejected") }}</option>
+        <option value="all" {% if status_filter == "all" %}selected{% endif %}>{{ t("submission.status_all") }}</option>
+      </select>
+    </label>
+    <button type="submit">{{ t("home.apply") }}</button>
+  </form>
+  <p class="meta">
+    {{ t("submission.stats_pending") }}: {{ status_stats.pending }},
+    {{ t("submission.stats_approved") }}: {{ status_stats.approved }},
+    {{ t("submission.stats_rejected") }}: {{ status_stats.rejected }}
+  </p>
+</section>
+
+<section class="panel">
+  {% if image_change_requests %}
+  <table>
+    <thead>
+      <tr>
+        <th>{{ t("submission.table_date") }}</th>
+        <th>{{ t("submission.table_title") }}</th>
+        <th>{{ t("submission.table_submitter") }}</th>
+        <th>{{ t("submission.table_status") }}</th>
+        <th>{{ t("submission.table_action") }}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in image_change_requests %}
+      <tr>
+        <td>{{ item.created_at|datetime_de }}</td>
+        <td><a href="/recipes/{{ item.recipe.id }}">{{ item.recipe.title }}</a></td>
+        <td>{{ item.requester_user.email if item.requester_user else "-" }}</td>
+        <td>{{ submission_status_label(item.status) }}</td>
+        <td><a href="/admin/image-change-requests/{{ item.id }}">{{ t("submission.open_detail") }}</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  {% if total_pages > 1 %}
+  <div class="pagination">
+    <div class="pagination-links">
+      {% if page > 1 %}
+      <a href="/admin/image-change-requests?status_filter={{ status_filter }}&page={{ page - 1 }}">{{ t("pagination.previous") }}</a>
+      {% else %}
+      <span class="disabled">{{ t("pagination.previous") }}</span>
+      {% endif %}
+
+      {% for item_page in range(1, total_pages + 1) %}
+      {% if item_page == page %}
+      <span class="active">{{ item_page }}</span>
+      {% else %}
+      <a href="/admin/image-change-requests?status_filter={{ status_filter }}&page={{ item_page }}">{{ item_page }}</a>
+      {% endif %}
+      {% endfor %}
+
+      {% if page < total_pages %}
+      <a href="/admin/image-change-requests?status_filter={{ status_filter }}&page={{ page + 1 }}">{{ t("pagination.next") }}</a>
+      {% else %}
+      <span class="disabled">{{ t("pagination.next") }}</span>
+      {% endif %}
+    </div>
+    <span class="pagination-info">{{ t("pagination.page") }} {{ page }} / {{ total_pages }}</span>
+  </div>
+  {% endif %}
+
+  {% else %}
+  <p>{{ t("image_change.admin_empty") }}</p>
+  {% endif %}
+</section>
+{% endblock %}

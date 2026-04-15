@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="panel">
+  <h1>{{ t("submission.admin_detail_title") }} #{{ submission.id }}</h1>
+  <p class="meta">
+    {{ submission_status_label(submission.status) }} |
+    {{ submission.created_at|datetime_de }} |
+    {% if submission.submitter_user %}
+    {{ submission.submitter_user.email }}
+    {% elif submission.submitter_email %}
+    {{ submission.submitter_email }}
+    {% else %}
+    {{ t("submission.guest") }}
+    {% endif %}
+  </p>
+  {% if message %}
+  <p class="meta">{{ message }}</p>
+  {% endif %}
+  {% if submission.admin_note %}
+  <p class="meta">{{ t("submission.admin_note") }}: {{ submission.admin_note }}</p>
+  {% endif %}
+  <div class="actions">
+    <a href="/admin/submissions">{{ t("submission.back_to_queue") }}</a>
+  </div>
+</section>
+<section class="panel">
+  <h2>{{ t("submission.preview") }}</h2>
+  {% if submission.images %}
+  <div class="cards">
+    {% for image in submission.images %}
+    <article class="card">
+      <img src="/submission-images/{{ image.id }}" alt="{{ submission.title }}" class="thumb">
+      <p class="meta">{% if image.is_primary %}{{ t("images.primary") }}{% endif %}</p>
+      <div class="actions">
+        <form method="post" action="/admin/submissions/images/{{ image.id }}/set-primary">
+          <button type="submit">{{ t("images.set_primary") }}</button>
+        </form>
+        <form method="post" action="/admin/submissions/images/{{ image.id }}/delete">
+          <button type="submit">{{ t("images.delete") }}</button>
+        </form>
+      </div>
+    </article>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p>{{ t("images.empty") }}</p>
+  {% endif %}
+  <h3>{{ submission.title }}</h3>
+  <p>{{ submission.description }}</p>
+  <p class="meta">{{ submission.category or "-" }} | {{ difficulty_label(submission.difficulty) }} | {{ submission.prep_time_minutes or "-" }} min</p>
+  {% if submission.servings_text %}
+  <p class="meta">{{ t("submission.servings") }}: {{ submission.servings_text }}</p>
+  {% endif %}
+  <h4>{{ t("recipe.ingredients") }}</h4>
+  <ul>
+    {% for ingredient in submission.ingredients %}
+    <li>{{ ingredient.ingredient_name }} {% if ingredient.quantity_text %}({{ ingredient.quantity_text }}){% endif %}{% if ingredient.grams is not none %} - {{ ingredient.grams }} g{% endif %}</li>
+    {% else %}
+    <li>{{ t("recipe.no_ingredients") }}</li>
+    {% endfor %}
+  </ul>
+  <h4>{{ t("recipe.instructions") }}</h4>
+  <pre>{{ submission.instructions }}</pre>
+</section>
+<section class="panel">
+  <h2>{{ t("submission.edit_submission") }}</h2>
+  <form method="post" action="/admin/submissions/{{ submission.id }}/edit" enctype="multipart/form-data" class="stack">
+    <label>{{ t("submission.title") }} <input type="text" name="title" value="{{ submission.title }}" required></label>
+    <label>{{ t("submission.description") }} <textarea name="description" rows="3">{{ submission.description }}</textarea></label>
+    <label>{{ t("submission.instructions") }} <textarea name="instructions" rows="8" required>{{ submission.instructions }}</textarea></label>
+    <label>{{ t("submission.category") }}
+      <select name="category_select" id="category_select">
+        {% for option in category_options %}
+        <option value="{{ option }}" {% if selected_category == option %}selected{% endif %}>{{ option }}</option>
+        {% endfor %}
+        <option value="__new__">{{ t("submission.new_category_option") }}</option>
+      </select>
+    </label>
+    <div id="new-category-wrapper" class="stack hidden">
+      <label>{{ t("submission.new_category_label") }} <input type="text" id="category_new" name="category_new"></label>
+    </div>
+    <label>{{ t("submission.difficulty") }}
+      <select name="difficulty">
+        <option value="easy" {% if submission.difficulty == "easy" %}selected{% endif %}>{{ t("difficulty.easy") }}</option>
+        <option value="medium" {% if submission.difficulty == "medium" %}selected{% endif %}>{{ t("difficulty.medium") }}</option>
+        <option value="hard" {% if submission.difficulty == "hard" %}selected{% endif %}>{{ t("difficulty.hard") }}</option>
+      </select>
+    </label>
+    <label>{{ t("submission.prep_time") }} <input type="number" min="1" name="prep_time_minutes" value="{{ submission.prep_time_minutes or '' }}"></label>
+    <label>{{ t("submission.servings") }} <input type="text" name="servings_text" value="{{ submission.servings_text or '' }}"></label>
+    <label>{{ t("submission.ingredients") }} <textarea name="ingredients_text" rows="7">{{ ingredients_text }}</textarea></label>
+    <label>{{ t("submission.image_optional") }} <input type="file" name="image" accept="image/png,image/jpeg,image/webp"></label>
+    <label class="inline">
+      <input type="checkbox" name="set_primary_new_image">
+      {{ t("submission.set_primary_new_image") }}
+    </label>
+    <button type="submit">{{ t("submission.save_changes") }}</button>
+  </form>
+</section>
+<section class="panel">
+  <h2>{{ t("submission.moderation_actions") }}</h2>
+  <form method="post" action="/admin/submissions/{{ submission.id }}/approve" class="stack">
+    <label>{{ t("submission.optional_admin_note") }} <textarea name="admin_note" rows="3">{{ submission.admin_note or "" }}</textarea></label>
+    <button type="submit">{{ t("submission.approve_button") }}</button>
+  </form>
+  <form method="post" action="/admin/submissions/{{ submission.id }}/reject" class="stack">
+    <label>{{ t("submission.reject_reason") }} <textarea name="admin_note" rows="3" required></textarea></label>
+    <button type="submit">{{ t("submission.reject_button") }}</button>
+  </form>
+</section>
+{% endblock %}

@@ -1,0 +1,32 @@
+services:
+  - type: web
+    name: mealmate
+    env: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    autoDeploy: true
+    envVars:
+      - key: APP_NAME
+        value: MealMate
+      - key: APP_ENV
+        value: prod
+      - key: APP_URL
+        value: https://mealmate.onrender.com
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DATABASE_URL
+        sync: false
+      - key: ALLOWED_HOSTS
+        value: mealmate.onrender.com
+      - key: COOKIE_SECURE
+        value: "1"
+      - key: TOKEN_EXPIRE_MINUTES
+        value: "60"
+      - key: MAX_UPLOAD_MB
+        value: "4"
+      - key: ALLOWED_IMAGE_TYPES
+        value: image/png,image/jpeg,image/webp
+      - key: AUTO_SEED_KOCHWIKI
+        value: "0"
+      - key: PORT
+        value: "10000"

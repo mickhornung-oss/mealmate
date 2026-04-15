@@ -1,0 +1,231 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="panel">
+  <h1>{{ t("admin.title") }}</h1>
+  {% if message %}
+  <p class="meta">{{ message }}</p>
+  {% endif %}
+  {% if error %}
+  <p class="error">{{ error }}</p>
+  {% endif %}
+  <p><a href="/admin/submissions">{{ t("submission.admin_queue_link") }}</a></p>
+  <p><a href="/admin/categories">Kategorien aufräumen</a></p>
+</section>
+<section class="panel">
+  <h2>Rezept-Übersetzungen</h2>
+  <p class="meta">Fehlende Übersetzungen generieren (de/en/fr).</p>
+  <p class="meta">Suspect DE translations: {{ suspect_de_translation_count }}</p>
+  <div class="actions">
+    <a href="/admin/translations/run" class="btn btn-primary">Rezept-Übersetzungen öffnen</a>
+    <a href="/admin/translations/audit-de" class="btn btn-secondary">Deutsch-Audit öffnen</a>
+  </div>
+</section>
+<section class="panel">
+  <h2>{{ t("image_change.admin_title") }}</h2>
+  <p class="meta">{{ t("image_change.pending_count", count=pending_image_change_count) }}</p>
+  <p><a href="/admin/image-change-requests">{{ t("image_change.open_queue") }}</a></p>
+  {% if pending_image_change_requests %}
+  <table>
+    <thead>
+      <tr>
+        <th>{{ t("submission.table_date") }}</th>
+        <th>{{ t("submission.table_title") }}</th>
+        <th>{{ t("submission.table_submitter") }}</th>
+        <th>{{ t("submission.table_action") }}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in pending_image_change_requests %}
+      <tr>
+        <td>{{ item.created_at|datetime_de }}</td>
+        <td><a href="/recipes/{{ item.recipe.id }}">{{ item.recipe.title }}</a></td>
+        <td>{{ item.requester_user.email if item.requester_user else "-" }}</td>
+        <td><a href="/admin/image-change-requests/{{ item.id }}">{{ t("submission.open_detail") }}</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p>{{ t("image_change.admin_empty") }}</p>
+  {% endif %}
+</section>
+<section class="panel">
+  <h2>{{ t("admin.import_title") }}</h2>
+  <div class="stack">
+    <h3>{{ t("admin.import_help_title") }}</h3>
+    <p class="meta">{{ t("admin.import_help_intro") }}</p>
+    <ul>
+      <li>{{ t("admin.import_required_columns") }}</li>
+      <li>{{ t("admin.import_optional_columns") }}</li>
+      <li>{{ t("admin.import_difficulty_values") }}</li>
+      <li>{{ t("admin.import_ingredients_example") }}</li>
+      <li>{{ t("admin.import_encoding_delimiter") }}</li>
+    </ul>
+    <div class="actions">
+      <a href="/admin/import-template.csv">{{ t("admin.download_template") }}</a>
+      <a href="/admin/import-example.csv">{{ t("admin.download_example") }}</a>
+    </div>
+  </div>
+  <form method="post" action="/admin/import-recipes" enctype="multipart/form-data" class="stack">
+    <label>{{ t("admin.upload_label") }}
+      <input type="file" name="file" accept=".csv" required>
+    </label>
+    <label class="inline">
+      <input type="checkbox" name="insert_only" {% if import_mode == "insert_only" %}checked{% endif %}>
+      {{ t("admin.insert_only") }}
+    </label>
+    <label class="inline">
+      <input type="checkbox" name="update_existing" {% if import_mode == "update_existing" %}checked{% endif %}>
+      {{ t("admin.update_existing") }}
+    </label>
+    <label class="inline">
+      <input type="checkbox" name="dry_run" {% if import_dry_run %}checked{% endif %}>
+      {{ t("admin.dry_run") }}
+    </label>
+    <label class="inline">
+      <input type="checkbox" name="force_with_warnings" {% if import_force_with_warnings %}checked{% endif %}>
+      {{ t("admin.force_with_warnings") }}
+    </label>
+    <p class="meta">{{ t("admin.import_warning_text") }}</p>
+    <div class="actions">
+      <button type="submit" name="action" value="preview">{{ t("admin.preview_button") }}</button>
+      <button type="submit" name="action" value="import">{{ t("admin.start_import") }}</button>
+    </div>
+  </form>
+  {% if preview_report %}
+  <h3>{{ t("admin.preview_title") }}</h3>
+  <p class="meta">
+    {{ t("admin.preview_total_rows") }}: {{ preview_report.total_rows }},
+    {{ t("admin.preview_delimiter") }}: {{ preview_report.delimiter }},
+    {{ t("admin.preview_fatal_rows") }}: {{ preview_report.fatal_error_rows }}
+  </p>
+  <p class="meta">
+    {{ t("admin.report_inserted") }}: {{ preview_report.inserted }},
+    {{ t("admin.report_updated") }}: {{ preview_report.updated }},
+    {{ t("admin.report_skipped") }}: {{ preview_report.skipped }},
+    {{ t("admin.report_errors") }}: {{ preview_report.errors|length }},
+    {{ t("admin.report_warnings") }}: {{ preview_report.warnings|length }}
+  </p>
+  <table>
+    <thead>
+      <tr>
+        <th>{{ t("admin.preview_row") }}</th>
+        <th>{{ t("admin.title_column") }}</th>
+        <th>{{ t("home.category") }}</th>
+        <th>{{ t("home.difficulty") }}</th>
+        <th>{{ t("recipe_form.prep_time") }}</th>
+        <th>{{ t("admin.preview_status") }}</th>
+        <th>{{ t("admin.preview_notes") }}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in preview_report.preview_rows %}
+      <tr>
+        <td>{{ row.row_number }}</td>
+        <td>{{ row.title }}</td>
+        <td>{{ row.category }}</td>
+        <td>{{ difficulty_label(row.difficulty) }}</td>
+        <td>{{ row.prep_time_minutes }}</td>
+        <td>{{ row.status }}</td>
+        <td>
+          {% if row.errors %}
+          {{ row.errors|join("; ") }}
+          {% elif row.warnings %}
+          {{ row.warnings|join("; ") }}
+          {% else %}
+          -
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% if preview_report.errors %}
+  <h4>{{ t("admin.preview_errors_title") }}</h4>
+  <ul>
+    {% for item in preview_report.errors %}
+    <li>{{ item }}</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+  {% if preview_report.warnings %}
+  <h4>{{ t("admin.preview_warnings_title") }}</h4>
+  <ul>
+    {% for item in preview_report.warnings %}
+    <li>{{ item }}</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+  {% endif %}
+  {% if report %}
+  <h3>{{ t("admin.import_result_title") }}</h3>
+  <p class="meta">
+    {{ t("admin.report_inserted") }}: {{ report.inserted }},
+    {{ t("admin.report_updated") }}: {{ report.updated }},
+    {{ t("admin.report_skipped") }}: {{ report.skipped }},
+    {{ t("admin.report_errors") }}: {{ report.errors|length }},
+    {{ t("admin.report_warnings") }}: {{ report.warnings|length }}
+  </p>
+  {% endif %}
+</section>
+<section class="panel">
+  <h2>{{ t("admin.category_stats_title") }}</h2>
+  <p><a href="/admin/categories">Zum Kategorie-Tool</a></p>
+  <p class="meta">{{ t("admin.category_distinct_count") }}: {{ distinct_category_count }}</p>
+  <h3>{{ t("admin.category_top") }}</h3>
+  <ul>
+    {% for category_name, category_count in top_categories %}
+    <li>{{ category_name }} ({{ category_count }})</li>
+    {% endfor %}
+  </ul>
+</section>
+<section class="panel">
+  <h2>{{ t("admin.users") }}</h2>
+  <table>
+    <thead>
+      <tr><th>{{ t("admin.id") }}</th><th>{{ t("admin.email") }}</th><th>{{ t("admin.role") }}</th><th>{{ t("admin.action") }}</th></tr>
+    </thead>
+    <tbody>
+      {% for user in users %}
+      <tr>
+        <td>{{ user.id }}</td>
+        <td>{{ user.email }}</td>
+        <td>{{ role_label(user.role) }}</td>
+        <td>
+          <form method="post" action="/admin/users/{{ user.id }}/role" class="inline">
+            <select name="role">
+              <option value="user" {% if user.role == "user" %}selected{% endif %}>{{ t("role.user") }}</option>
+              <option value="admin" {% if user.role == "admin" %}selected{% endif %}>{{ t("role.admin") }}</option>
+            </select>
+            <button type="submit">{{ t("admin.save") }}</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+<section class="panel">
+  <h2>{{ t("admin.recipes") }}</h2>
+  <table>
+    <thead>
+      <tr><th>{{ t("admin.id") }}</th><th>{{ t("admin.title_column") }}</th><th>{{ t("admin.creator") }}</th><th>{{ t("admin.source") }}</th><th>{{ t("admin.action") }}</th></tr>
+    </thead>
+    <tbody>
+      {% for recipe in recipes %}
+      <tr>
+        <td>{{ recipe.id }}</td>
+        <td><a href="/recipes/{{ recipe.id }}">{{ recipe.title }}</a></td>
+        <td>{{ recipe.creator.email }}</td>
+        <td>{{ recipe.source }}</td>
+        <td>
+          <form method="post" action="/admin/recipes/{{ recipe.id }}/delete">
+            <button type="submit">{{ t("recipe.delete") }}</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

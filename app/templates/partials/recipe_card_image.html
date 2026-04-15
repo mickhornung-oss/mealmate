@@ -1,0 +1,68 @@
+<div id="card-image-{{ recipe.id }}" class="card-image-wrap">
+  {% if display_image_url %}
+  <img
+    src="{{ display_image_url }}"
+    alt="{{ display_title if display_title is defined and display_title else recipe.title }}"
+    class="thumb card-thumb"
+    {% if display_image_kind == "external" %}referrerpolicy="no-referrer" loading="lazy"{% endif %}
+  >
+  {% else %}
+  <div class="thumb placeholder-thumb{% if not can_upload_direct and not can_request_change %} has-login-hint{% endif %}">
+    <div class="placeholder-inner">
+      <span class="placeholder-icon" aria-hidden="true">+</span>
+      <span class="placeholder-label">{{ t("images.placeholder") }}</span>
+    </div>
+    {% if not can_upload_direct and not can_request_change %}
+    <div class="guest-image-hint">
+      <a class="btn btn-secondary btn-compact placeholder-login" href="/login">{{ t("images.login_to_propose") }}</a>
+    </div>
+    {% endif %}
+    {% if can_upload_direct or can_request_change %}
+    <details class="plus-uploader">
+      <summary title="{{ t('images.plus_title') }}">+</summary>
+      {% if can_upload_direct %}
+      <form
+        method="post"
+        action="/recipes/{{ recipe.id }}/images"
+        enctype="multipart/form-data"
+        hx-post="/recipes/{{ recipe.id }}/images"
+        hx-encoding="multipart/form-data"
+        hx-target="#card-image-{{ recipe.id }}"
+        hx-swap="outerHTML"
+        class="stack"
+      >
+        <input type="hidden" name="response_mode" value="card">
+        <input type="hidden" name="set_primary" value="true">
+        <input type="file" name="file" accept="image/png,image/jpeg,image/webp" required>
+        <button type="submit">{{ t("images.upload") }}</button>
+      </form>
+      {% elif can_request_change %}
+      <form
+        method="post"
+        action="/recipes/{{ recipe.id }}/image-change-request"
+        enctype="multipart/form-data"
+        hx-post="/recipes/{{ recipe.id }}/image-change-request"
+        hx-encoding="multipart/form-data"
+        hx-target="#card-image-{{ recipe.id }}"
+        hx-swap="outerHTML"
+        class="stack"
+      >
+        <input type="hidden" name="response_mode" value="card">
+        <input type="file" name="file" accept="image/png,image/jpeg,image/webp" required>
+        <button type="submit">{{ t("images.propose_change") }}</button>
+      </form>
+      {% endif %}
+    </details>
+    {% endif %}
+  </div>
+  {% endif %}
+  {% if has_pending_change_request %}
+  <p class="meta pending-badge">{{ t("images.pending_badge") }}</p>
+  {% endif %}
+  {% if image_feedback_message %}
+  <p class="meta">{{ image_feedback_message }}</p>
+  {% endif %}
+  {% if image_feedback_error %}
+  <p class="error">{{ image_feedback_error }}</p>
+  {% endif %}
+</div>

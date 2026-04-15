@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="panel">
+  <h1>{{ t("submission.admin_queue_title") }}</h1>
+  <form method="get" action="/admin/submissions" class="inline">
+    <label>{{ t("submission.status_filter") }}
+      <select name="status_filter">
+        <option value="pending" {% if status_filter == "pending" %}selected{% endif %}>{{ t("submission.status_pending") }}</option>
+        <option value="approved" {% if status_filter == "approved" %}selected{% endif %}>{{ t("submission.status_approved") }}</option>
+        <option value="rejected" {% if status_filter == "rejected" %}selected{% endif %}>{{ t("submission.status_rejected") }}</option>
+        <option value="all" {% if status_filter == "all" %}selected{% endif %}>{{ t("submission.status_all") }}</option>
+      </select>
+    </label>
+    <button type="submit">{{ t("home.apply") }}</button>
+  </form>
+  <p class="meta">
+    {{ t("submission.stats_pending") }}: {{ status_stats.pending }},
+    {{ t("submission.stats_approved") }}: {{ status_stats.approved }},
+    {{ t("submission.stats_rejected") }}: {{ status_stats.rejected }}
+  </p>
+</section>
+<section class="panel">
+  {% if submissions %}
+  <table>
+    <thead>
+      <tr>
+        <th>{{ t("submission.table_date") }}</th>
+        <th>{{ t("submission.table_title") }}</th>
+        <th>{{ t("submission.table_submitter") }}</th>
+        <th>{{ t("submission.table_status") }}</th>
+        <th>{{ t("submission.table_action") }}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for submission in submissions %}
+      <tr>
+        <td>{{ submission.created_at|datetime_de }}</td>
+        <td>{{ submission.title }}</td>
+        <td>
+          {% if submission.submitter_user %}
+          {{ submission.submitter_user.email }}
+          {% elif submission.submitter_email %}
+          {{ submission.submitter_email }}
+          {% else %}
+          {{ t("submission.guest") }}
+          {% endif %}
+        </td>
+        <td>{{ submission_status_label(submission.status) }}</td>
+        <td><a href="/admin/submissions/{{ submission.id }}">{{ t("submission.open_detail") }}</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% if total_pages > 1 %}
+  <div class="pagination">
+    <div class="pagination-links">
+      {% if page > 1 %}
+      <a href="/admin/submissions?status_filter={{ status_filter }}&page={{ page - 1 }}">{{ t("pagination.previous") }}</a>
+      {% else %}
+      <span class="disabled">{{ t("pagination.previous") }}</span>
+      {% endif %}
+      {% for item in pagination_items %}
+      {% if item is none %}
+      <span class="ellipsis">...</span>
+      {% elif item == page %}
+      <span class="active">{{ item }}</span>
+      {% else %}
+      <a href="/admin/submissions?status_filter={{ status_filter }}&page={{ item }}">{{ item }}</a>
+      {% endif %}
+      {% endfor %}
+      {% if page < total_pages %}
+      <a href="/admin/submissions?status_filter={{ status_filter }}&page={{ page + 1 }}">{{ t("pagination.next") }}</a>
+      {% else %}
+      <span class="disabled">{{ t("pagination.next") }}</span>
+      {% endif %}
+    </div>
+    <span class="pagination-info">{{ t("pagination.page") }} {{ page }} / {{ total_pages }}</span>
+  </div>
+  {% endif %}
+  {% else %}
+  <p>{{ t("submission.admin_empty") }}</p>
+  {% endif %}
+</section>
+{% endblock %}

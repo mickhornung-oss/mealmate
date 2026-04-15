@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="panel">
+  <h1>{{ t("favorites.title") }}</h1>
+  <div class="cards">
+    {% for recipe in favorite_recipes %}
+    <article class="card">
+      {% if recipe.images %}
+      <img src="/images/{{ recipe.images[0].id }}" alt="{{ recipe.title }}" class="thumb">
+      {% elif recipe.title_image_url %}
+      <img src="{{ recipe.title_image_url }}" alt="{{ recipe.title }}" class="thumb">
+      {% endif %}
+      <h3><a href="/recipes/{{ recipe.id }}">{{ recipe.title }}</a></h3>
+      <p>{{ recipe.category }} | {{ difficulty_label(recipe.difficulty) }} | {{ recipe.prep_time_minutes }} min</p>
+      <form method="post" action="/recipes/{{ recipe.id }}/favorite">
+        <button type="submit">{{ t("favorites.remove") }}</button>
+      </form>
+    </article>
+    {% else %}
+    <p>{{ t("favorites.empty") }}</p>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}

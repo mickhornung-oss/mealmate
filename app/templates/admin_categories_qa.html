@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="panel">
+  <h1>Kategorie-QA Diagnose</h1>
+  <p class="meta">Die Liste zeigt auffällige Zuordnungen für manuelle Prüfung.</p>
+  <div class="actions">
+    <a class="btn btn-secondary" href="/admin/categories">Zurück zum Kategorie-Tool</a>
+    <a class="btn btn-secondary" href="/admin">Zur Admin-Startseite</a>
+  </div>
+</section>
+
+<section class="panel">
+  <h2>Auffällige Rezepte (max {{ limit }})</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Recipe ID</th>
+        <th>Titel</th>
+        <th>Raw Category</th>
+        <th>Aktuell Canonical</th>
+        <th>Vorschlag Canonical</th>
+        <th>Reason</th>
+        <th>Auffälligkeit</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in qa_rows %}
+      <tr>
+        <td>{{ row.recipe_id }}</td>
+        <td><a href="/recipes/{{ row.recipe_id }}">{{ row.title }}</a></td>
+        <td>{{ row.raw_category }}</td>
+        <td>{{ row.canonical_category or "-" }}</td>
+        <td>{{ row.suggested_canonical }}</td>
+        <td>{{ row.reason }}</td>
+        <td>{{ row.suspicious_reason }}</td>
+      </tr>
+      {% else %}
+      <tr>
+        <td colspan="7">Keine auffälligen Rezepte gefunden.</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

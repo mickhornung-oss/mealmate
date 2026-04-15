@@ -1,0 +1,120 @@
+﻿{% extends "base.html" %}
+{% block content %}
+<section class="panel">
+  <h1>Kategorie-Aufräumen</h1>
+  <p class="meta">Rohkategorien bleiben erhalten, nur canonical_category wird für UI und Filter gesetzt.</p>
+  {% if rebuild_report %}
+  <p class="meta">
+    Rebuild ({{ rebuild_report.mode }}) abgeschlossen: aktualisiert {{ rebuild_report.updated }}, unverändert {{ rebuild_report.skipped }}.
+    {% if rebuild_report.mode == "suspicious" %}Geprüfte auffällige Rezepte: {{ rebuild_report.suspicious_count }}.{% endif %}
+  </p>
+  {% endif %}
+  <div class="actions">
+    <a class="btn btn-secondary" href="/admin">Zur Admin-Startseite</a>
+    <a class="btn btn-secondary" href="/admin/categories/qa">QA-Diagnose anzeigen</a>
+    <form method="post" action="/admin/categories/rebuild?mode=full">
+      <button type="submit" class="btn btn-primary">Rebuild komplett</button>
+    </form>
+    <form method="post" action="/admin/categories/rebuild?mode=suspicious">
+      <button type="submit" class="btn btn-secondary">Nur auffällige Rebuilds</button>
+    </form>
+  </div>
+</section>
+
+<section class="panel">
+  <h2>Neue Mapping-Regel</h2>
+  <form method="post" action="/admin/categories/mappings" class="stack">
+    <label>Pattern (Substring, case-insensitive)
+      <input type="text" name="pattern" required placeholder="z.B. Suppe, Dessert, Frühstück">
+    </label>
+    <label>Kanonische Kategorie
+      <select name="canonical_category">
+        {% for option in standard_canonical_categories %}
+        <option value="{{ option }}">{{ option }}</option>
+        {% endfor %}
+        <option value="__IGNORE__">(IGNORE / nicht zuordnen)</option>
+      </select>
+    </label>
+    <label>Scope
+      <select name="scope">
+        <option value="raw" selected>raw (nur cleaned_raw_category)</option>
+        <option value="fulltext">fulltext (nur wenn raw leer/unspezifisch)</option>
+      </select>
+    </label>
+    <label>Priorität (kleiner = stärker)
+      <input type="number" name="priority" value="100" min="0" required>
+    </label>
+    <label class="inline">
+      <input type="checkbox" name="enabled" checked>
+      Regel aktiv
+    </label>
+    <button type="submit" class="btn btn-primary">Mapping speichern</button>
+  </form>
+</section>
+
+<section class="panel">
+  <h2>Top Raw Categories</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Raw Category</th>
+        <th>Anzahl</th>
+        <th>Vorschlag Canonical</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in raw_category_overview %}
+      <tr>
+        <td>{{ item.raw_category }}</td>
+        <td>{{ item.count }}</td>
+        <td>{{ item.guessed_canonical }}</td>
+      </tr>
+      {% else %}
+      <tr>
+        <td colspan="3">Keine Kategorien vorhanden.</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<section class="panel">
+  <h2>Gespeicherte Mapping-Regeln</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Pattern</th>
+        <th>Canonical</th>
+        <th>Scope</th>
+        <th>Priorität</th>
+        <th>Status</th>
+        <th>Aktion</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for mapping in category_mappings %}
+      <tr>
+        <td>{{ mapping.id }}</td>
+        <td>{{ mapping.pattern }}</td>
+        <td>{{ mapping.canonical_category }}</td>
+        <td>{{ mapping.scope or "raw" }}</td>
+        <td>{{ mapping.priority }}</td>
+        <td>{% if mapping.enabled %}aktiv{% else %}inaktiv{% endif %}</td>
+        <td>
+          <form method="post" action="/admin/categories/mappings/{{ mapping.id }}/toggle">
+            <button type="submit" class="btn {% if mapping.enabled %}btn-danger{% else %}btn-secondary{% endif %}">
+              {% if mapping.enabled %}Deaktivieren{% else %}Aktivieren{% endif %}
+            </button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr>
+        <td colspan="7">Noch keine Mapping-Regeln vorhanden.</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

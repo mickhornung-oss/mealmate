@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="panel">
+  <h1>{{ t("profile.title") }}</h1>
+  {% if message %}<p class="meta">{{ message }}</p>{% endif %}
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  <p><strong>{{ t("profile.user_uid") }}:</strong> {{ user.user_uid }}</p>
+  <p><strong>{{ t("profile.email") }}:</strong> {{ user.email }}</p>
+  <p><strong>{{ t("profile.role") }}:</strong> {{ role_label(user.role) }}</p>
+  <p><strong>{{ t("profile.username") }}:</strong> {{ user.username or "-" }}</p>
+  <p><strong>{{ t("profile.joined") }}:</strong> {{ user.created_at|datetime_de }}</p>
+</section>
+
+<section class="panel narrow">
+  <h2>{{ t("auth.change_email_title") }}</h2>
+  <p><a href="/auth/change-email">{{ t("auth.change_email_open_link") }}</a></p>
+</section>
+
+<section class="panel narrow">
+  <h2>{{ t("profile.username_change_title") }}</h2>
+  <form method="post" action="/profile/username" class="stack">
+    <label>{{ t("profile.username") }}
+      <input type="text" name="username" value="{{ user.username or '' }}" minlength="3" maxlength="30" required>
+    </label>
+    <button type="submit">{{ t("profile.username_save") }}</button>
+  </form>
+</section>
+
+<section class="panel narrow">
+  <h2>{{ t("auth.change_password_title") }}</h2>
+  <form method="post" action="/auth/change-password" class="stack">
+    <label>{{ t("auth.old_password") }} <input type="password" name="old_password" required></label>
+    <label>{{ t("auth.new_password") }} <input type="password" name="new_password" minlength="10" required></label>
+    <label>{{ t("auth.confirm_password") }} <input type="password" name="confirm_password" minlength="10" required></label>
+    <button type="submit">{{ t("auth.change_password_button") }}</button>
+  </form>
+</section>
+{% endblock %}

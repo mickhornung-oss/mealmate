@@ -1,0 +1,43 @@
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: mealmate
+      POSTGRES_USER: mealmate
+      POSTGRES_PASSWORD: mealmate
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mealmate -d mealmate"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      APP_NAME: MealMate
+      APP_ENV: dev
+      APP_URL: http://localhost:8000
+      SECRET_KEY: change-this-in-docker
+      ALGORITHM: HS256
+      TOKEN_EXPIRE_MINUTES: 60
+      DATABASE_URL: postgresql+psycopg://mealmate:mealmate@db:5432/mealmate
+      ALLOWED_HOSTS: localhost,127.0.0.1
+      COOKIE_SECURE: 0
+      MAX_UPLOAD_MB: 4
+      ALLOWED_IMAGE_TYPES: image/png,image/jpeg,image/webp
+      AUTO_SEED_KOCHWIKI: 0
+      PORT: 8000
+    ports:
+      - "8000:8000"
+
+volumes:
+  postgres_data:

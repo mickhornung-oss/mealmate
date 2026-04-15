@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="panel">
+  <h1>{{ t("submission.submit_title") }}</h1>
+  <p class="meta">{{ t("submission.submit_hint") }}</p>
+  {% if message %}
+  <p class="meta">{{ message }}</p>
+  {% endif %}
+  {% if error %}
+  <p class="error">{{ error }}</p>
+  {% endif %}
+  <form method="post" action="/submit" enctype="multipart/form-data" class="stack">
+    {% if not current_user %}
+    <label>{{ t("submission.submitter_email") }} <input type="email" name="submitter_email" value="{{ submitter_email_value }}" placeholder="name@example.com"></label>
+    {% endif %}
+    <label>{{ t("submission.title") }} <input type="text" name="title" value="{{ title_value }}" required></label>
+    <label>{{ t("submission.description") }} <textarea name="description" rows="3">{{ description_value }}</textarea></label>
+    <label>{{ t("submission.instructions") }} <textarea name="instructions" rows="8" required>{{ instructions_value }}</textarea></label>
+    <label>{{ t("submission.category") }}
+      <select name="category_select" id="category_select">
+        {% for option in category_options %}
+        <option value="{{ option }}" {% if selected_category == option %}selected{% endif %}>{{ option }}</option>
+        {% endfor %}
+        <option value="__new__">{{ t("submission.new_category_option") }}</option>
+      </select>
+    </label>
+    <div id="new-category-wrapper" class="stack hidden">
+      <label>{{ t("submission.new_category_label") }} <input type="text" id="category_new" name="category_new" value="{{ category_new_value }}"></label>
+    </div>
+    <label>{{ t("submission.difficulty") }}
+      <select name="difficulty">
+        <option value="easy" {% if difficulty_value == "easy" %}selected{% endif %}>{{ t("difficulty.easy") }}</option>
+        <option value="medium" {% if difficulty_value == "medium" %}selected{% endif %}>{{ t("difficulty.medium") }}</option>
+        <option value="hard" {% if difficulty_value == "hard" %}selected{% endif %}>{{ t("difficulty.hard") }}</option>
+      </select>
+    </label>
+    <label>{{ t("submission.prep_time") }} <input type="number" min="1" name="prep_time_minutes" value="{{ prep_time_value }}"></label>
+    <label>{{ t("submission.servings") }} <input type="text" name="servings_text" value="{{ servings_value }}"></label>
+    <label>{{ t("submission.ingredients") }}
+      <textarea name="ingredients_text" rows="6" placeholder="Tomate|2 Stück&#10;Olivenöl|1 EL">{{ ingredients_text }}</textarea>
+    </label>
+    <label>{{ t("submission.image_optional") }} <input type="file" name="image" accept="image/png,image/jpeg,image/webp"></label>
+    <button type="submit">{{ t("submission.submit_button") }}</button>
+  </form>
+</section>
+{% endblock %}

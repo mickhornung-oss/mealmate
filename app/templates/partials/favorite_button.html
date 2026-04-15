@@ -1,0 +1,21 @@
+{% set favorite_target = favorite_box_id or "favorite-box" %}
+{% if current_user %}
+<div id="{{ favorite_target }}" class="favorite-box">
+  <form
+    method="post"
+    action="/recipes/{{ recipe.id }}/favorite"
+    hx-post="/recipes/{{ recipe.id }}/favorite"
+    hx-target="#{{ favorite_target }}"
+    hx-swap="outerHTML"
+  >
+    <input type="hidden" name="favorite_box_id" value="{{ favorite_target }}">
+    <button type="submit" class="btn btn-secondary favorite-btn">
+      {% if is_favorite %}
+      {{ t("favorite.remove") }}
+      {% else %}
+      {{ t("favorite.add") }}
+      {% endif %}
+    </button>
+  </form>
+</div>
+{% endif %}

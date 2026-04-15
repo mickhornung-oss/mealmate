@@ -1,0 +1,144 @@
+﻿<section class="panel" id="recipe-images-section">
+  <h2>{{ t("images.title") }}</h2>
+
+  {% if display_image_url %}
+  <img
+    src="{{ display_image_url }}"
+    alt="{{ display_title if display_title is defined and display_title else recipe.title }}"
+    class="hero-image"
+    {% if display_image_kind == "external" %}referrerpolicy="no-referrer" loading="lazy"{% endif %}
+  >
+  {% else %}
+  <div class="hero-placeholder">
+    <span>{{ t("images.placeholder") }}</span>
+    {% if can_upload_direct or can_request_change %}
+    <details class="plus-uploader">
+      <summary title="{{ t('images.plus_title') }}">+</summary>
+      {% if can_upload_direct %}
+      <form
+        method="post"
+        action="/recipes/{{ recipe.id }}/images"
+        enctype="multipart/form-data"
+        hx-post="/recipes/{{ recipe.id }}/images"
+        hx-encoding="multipart/form-data"
+        hx-target="#recipe-images-section"
+        hx-swap="outerHTML"
+        class="stack"
+      >
+        <input type="hidden" name="response_mode" value="detail">
+        <input type="hidden" name="set_primary" value="true">
+        <input type="file" name="file" accept="image/png,image/jpeg,image/webp" required>
+        <button type="submit">{{ t("images.upload") }}</button>
+      </form>
+      {% elif can_request_change %}
+      <form
+        method="post"
+        action="/recipes/{{ recipe.id }}/image-change-request"
+        enctype="multipart/form-data"
+        hx-post="/recipes/{{ recipe.id }}/image-change-request"
+        hx-encoding="multipart/form-data"
+        hx-target="#recipe-images-section"
+        hx-swap="outerHTML"
+        class="stack"
+      >
+        <input type="hidden" name="response_mode" value="detail">
+        <input type="file" name="file" accept="image/png,image/jpeg,image/webp" required>
+        <button type="submit">{{ t("images.propose_change") }}</button>
+      </form>
+      {% endif %}
+    </details>
+    {% else %}
+    <a href="/login">{{ t("images.login_to_propose") }}</a>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {% if image_feedback_message %}
+  <p class="meta">{{ image_feedback_message }}</p>
+  {% endif %}
+  {% if image_feedback_error %}
+  <p class="error">{{ image_feedback_error }}</p>
+  {% endif %}
+  {% if has_pending_change_request %}
+  <p class="meta pending-badge">{{ t("images.pending_badge") }}</p>
+  {% endif %}
+
+  {% if can_upload_direct %}
+  <form
+    method="post"
+    action="/recipes/{{ recipe.id }}/images"
+    enctype="multipart/form-data"
+    hx-post="/recipes/{{ recipe.id }}/images"
+    hx-encoding="multipart/form-data"
+    hx-target="#recipe-images-section"
+    hx-swap="outerHTML"
+    class="stack"
+  >
+    <input type="hidden" name="response_mode" value="detail">
+    <label>{{ t("images.new_file") }}
+      <input type="file" name="file" accept="image/png,image/jpeg,image/webp" required>
+    </label>
+    <label class="inline">
+      <input type="checkbox" name="set_primary" value="true" checked>
+      {{ t("images.set_primary") }}
+    </label>
+    <button type="submit">{{ t("images.upload") }}</button>
+  </form>
+  {% elif can_request_change %}
+  <p class="meta">{{ t("images.user_change_note") }}</p>
+  <form
+    method="post"
+    action="/recipes/{{ recipe.id }}/image-change-request"
+    enctype="multipart/form-data"
+    hx-post="/recipes/{{ recipe.id }}/image-change-request"
+    hx-encoding="multipart/form-data"
+    hx-target="#recipe-images-section"
+    hx-swap="outerHTML"
+    class="stack"
+  >
+    <input type="hidden" name="response_mode" value="detail">
+    <label>{{ t("images.new_file") }}
+      <input type="file" name="file" accept="image/png,image/jpeg,image/webp" required>
+    </label>
+    <button type="submit">{{ t("images.propose_change") }}</button>
+  </form>
+  {% endif %}
+
+  <div class="cards">
+    {% for image in recipe.images %}
+    <article class="card">
+      <img src="/images/{{ image.id }}" alt="{{ image.filename }}" class="thumb">
+      <p>{{ image.filename }}</p>
+      {% if image.is_primary %}
+      <p class="meta">{{ t("images.primary") }}</p>
+      {% endif %}
+      {% if can_upload_direct %}
+      <div class="actions">
+        {% if not image.is_primary %}
+        <form
+          method="post"
+          action="/images/{{ image.id }}/set-primary"
+          hx-post="/images/{{ image.id }}/set-primary"
+          hx-target="#recipe-images-section"
+          hx-swap="outerHTML"
+        >
+          <button type="submit">{{ t("images.set_primary") }}</button>
+        </form>
+        {% endif %}
+        <form
+          method="post"
+          action="/images/{{ image.id }}/delete"
+          hx-post="/images/{{ image.id }}/delete"
+          hx-target="#recipe-images-section"
+          hx-swap="outerHTML"
+        >
+          <button type="submit">{{ t("images.delete") }}</button>
+        </form>
+      </div>
+      {% endif %}
+    </article>
+    {% else %}
+    <p>{{ t("images.empty") }}</p>
+    {% endfor %}
+  </div>
+</section>

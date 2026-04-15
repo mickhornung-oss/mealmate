@@ -1,0 +1,48 @@
+:root {
+  --theme-shadow-warm: 0 10px 26px rgba(75, 46, 43, 0.11);
+}
+
+body {
+  background:
+    radial-gradient(1200px 600px at 10% 10%, rgba(244, 211, 94, 0.25), transparent 60%),
+    radial-gradient(900px 500px at 90% 20%, rgba(167, 211, 209, 0.22), transparent 60%),
+    radial-gradient(900px 500px at 70% 90%, rgba(217, 107, 99, 0.18), transparent 55%),
+    linear-gradient(180deg, var(--bg) 0%, #f6ead6 100%);
+}
+
+.container,
+.page-shell {
+  background: transparent;
+}
+
+.topbar {
+  background: rgba(255, 245, 195, 0.72);
+}
+
+.card,
+.panel,
+.sidebar-card,
+.content-card,
+.recipe-card,
+.featured-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: var(--theme-shadow-warm);
+}
+
+.placeholder-thumb,
+.hero-placeholder,
+.featured-fallback {
+  background: linear-gradient(145deg, var(--surface) 0%, var(--surface-2) 100%);
+}
+
+.recipe-content {
+  gap: var(--space-2);
+}
+
+.recipe-title {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}

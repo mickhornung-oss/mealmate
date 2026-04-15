@@ -1,0 +1,67 @@
+﻿{% extends "base.html" %}
+{% block content %}
+<section class="panel">
+  <h1>{{ t("image_change.detail_title") }} #{{ image_change_request.id }}</h1>
+  <p class="meta">
+    {{ submission_status_label(image_change_request.status) }} |
+    {{ image_change_request.created_at|datetime_de }} |
+    {{ image_change_request.requester_user.email if image_change_request.requester_user else "-" }}
+  </p>
+  {% if message %}
+  <p class="meta">{{ message }}</p>
+  {% endif %}
+  {% if image_change_request.admin_note %}
+  <p class="meta">{{ t("submission.admin_note") }}: {{ image_change_request.admin_note }}</p>
+  {% endif %}
+  <div class="actions">
+    <a href="/admin/image-change-requests">{{ t("submission.back_to_queue") }}</a>
+    <a href="/recipes/{{ recipe.id }}">{{ recipe.title }}</a>
+  </div>
+</section>
+
+<section class="panel">
+  <h2>{{ t("image_change.compare_title") }}</h2>
+  <div class="cards">
+    <article class="card">
+      <h3>{{ t("image_change.current_image") }}</h3>
+      {% if current_image_url %}
+      <img
+        src="{{ current_image_url }}"
+        alt="{{ recipe.title }}"
+        class="thumb"
+        {% if current_image_kind == "external" %}referrerpolicy="no-referrer" loading="lazy"{% endif %}
+      >
+      {% else %}
+      <div class="thumb placeholder-thumb"><span>{{ t("images.placeholder") }}</span></div>
+      {% endif %}
+    </article>
+
+    <article class="card">
+      <h3>{{ t("image_change.proposed_image") }}</h3>
+      {% if proposed_file %}
+      <img src="/admin/image-change-files/{{ proposed_file.id }}" alt="{{ recipe.title }}" class="thumb">
+      <p class="meta">{{ proposed_file.filename }}</p>
+      {% else %}
+      <div class="thumb placeholder-thumb"><span>{{ t("images.empty") }}</span></div>
+      {% endif %}
+    </article>
+  </div>
+</section>
+
+<section class="panel">
+  <h2>{{ t("submission.moderation_actions") }}</h2>
+  {% if image_change_request.status == "pending" %}
+  <form method="post" action="/admin/image-change-requests/{{ image_change_request.id }}/approve" class="stack">
+    <label>{{ t("submission.optional_admin_note") }} <textarea name="admin_note" rows="3">{{ image_change_request.admin_note or "" }}</textarea></label>
+    <button type="submit">{{ t("moderation.approve") }}</button>
+  </form>
+
+  <form method="post" action="/admin/image-change-requests/{{ image_change_request.id }}/reject" class="stack">
+    <label>{{ t("submission.reject_reason") }} <textarea name="admin_note" rows="3" required></textarea></label>
+    <button type="submit">{{ t("moderation.reject") }}</button>
+  </form>
+  {% else %}
+  <p class="meta">{{ t("image_change.review_done") }}</p>
+  {% endif %}
+</section>
+{% endblock %}

@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="panel narrow">
+  <h1>{{ t("auth.change_email_confirm_title") }}</h1>
+  {% if message %}<p class="meta">{{ message }}</p>{% endif %}
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  {% if is_valid %}
+  <p class="meta">{{ t("auth.change_email_confirm_hint", email=new_email_value) }}</p>
+  <form method="post" action="/auth/change-email/confirm" class="stack">
+    <input type="hidden" name="token" value="{{ token_value }}">
+    <button type="submit">{{ t("auth.change_email_confirm_button") }}</button>
+  </form>
+  {% else %}
+  <p class="meta">{{ t("auth.change_email_reissue_hint") }}</p>
+  <p><a href="/auth/change-email">{{ t("auth.change_email_retry_link") }}</a></p>
+  {% endif %}
+</section>
+{% endblock %}

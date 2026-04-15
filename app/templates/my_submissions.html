@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="panel">
+  <h1>{{ t("submission.my_title") }}</h1>
+  {% if submitted %}
+  <p class="meta">{{ t("submission.my_submitted_message") }}</p>
+  {% endif %}
+  {% if submissions %}
+  <p class="list-summary">{{ t("pagination.results_range", start=((page - 1) * 20 + 1), end=((page - 1) * 20 + submissions|length), total=total_count) }}</p>
+  <div class="cards">
+    {% for submission in submissions %}
+    <article class="card">
+      {% if submission.images %}
+      <img src="/submission-images/{{ submission.images[0].id }}" alt="{{ submission.title }}" class="thumb">
+      {% endif %}
+      <h3>{{ submission.title }}</h3>
+      <p class="meta">{{ submission_status_label(submission.status) }} | {{ submission.created_at|datetime_de }}</p>
+      <p class="meta">{{ submission.category or "-" }} | {{ difficulty_label(submission.difficulty) }}</p>
+      {% if submission.admin_note %}
+      <p class="meta">{{ t("submission.admin_note") }}: {{ submission.admin_note }}</p>
+      {% endif %}
+    </article>
+    {% endfor %}
+  </div>
+  {% if total_pages > 1 %}
+  <div class="pagination">
+    <div class="pagination-links">
+      {% if page > 1 %}
+      <a href="/my-submissions?page={{ page - 1 }}">{{ t("pagination.previous") }}</a>
+      {% else %}
+      <span class="disabled">{{ t("pagination.previous") }}</span>
+      {% endif %}
+      {% for item in pagination_items %}
+      {% if item is none %}
+      <span class="ellipsis">...</span>
+      {% elif item == page %}
+      <span class="active">{{ item }}</span>
+      {% else %}
+      <a href="/my-submissions?page={{ item }}">{{ item }}</a>
+      {% endif %}
+      {% endfor %}
+      {% if page < total_pages %}
+      <a href="/my-submissions?page={{ page + 1 }}">{{ t("pagination.next") }}</a>
+      {% else %}
+      <span class="disabled">{{ t("pagination.next") }}</span>
+      {% endif %}
+    </div>
+    <span class="pagination-info">{{ t("pagination.page") }} {{ page }} / {{ total_pages }}</span>
+  </div>
+  {% endif %}
+  {% else %}
+  <p>{{ t("submission.my_empty") }}</p>
+  {% endif %}
+</section>
+{% endblock %}

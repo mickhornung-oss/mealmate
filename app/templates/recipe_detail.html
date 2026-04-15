@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block content %}
+<article class="panel">
+  <h1>{{ display_title }}</h1>
+  <p>{{ display_description }}</p>
+  <p class="meta">{{ recipe.canonical_category or recipe.category }} | {{ difficulty_label(recipe.difficulty) }} | {{ recipe.prep_time_minutes }} min</p>
+  <p class="meta">{{ t("recipe.average_rating") }}: {{ "%.2f"|format(avg_rating) }} ({{ review_count }} {{ t("recipe.review_count_label") }})</p>
+  <div class="actions">
+    <a href="/recipes/{{ recipe.id }}/pdf" target="_blank">{{ t("recipe.pdf_download") }}</a>
+    {% if current_user and (current_user.id == recipe.creator_id or current_user.role == "admin") %}
+    <a href="/recipes/{{ recipe.id }}/edit">{{ t("recipe.edit") }}</a>
+    <form method="post" action="/recipes/{{ recipe.id }}/delete" class="inline">
+      <button type="submit">{{ t("recipe.delete") }}</button>
+    </form>
+    {% endif %}
+  </div>
+  {% set favorite_box_id = "favorite-box" %}
+  {% include "partials/favorite_button.html" %}
+</article>
+{% include "partials/recipe_images.html" %}
+<section class="panel">
+  <h2>{{ t("recipe.ingredients") }}</h2>
+  {% if display_ingredients_lines %}
+  <ul>
+    {% for item in display_ingredients_lines %}
+    <li>{{ item }}</li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <ul>
+    {% for link in recipe.recipe_ingredients %}
+    <li>{{ link.ingredient.name }} {{ link.quantity_text }} {% if link.grams %}({{ link.grams }} g){% endif %}</li>
+    {% else %}
+    <li>{{ t("recipe.no_ingredients") }}</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+</section>
+<section class="panel">
+  <h2>{{ t("recipe.instructions") }}</h2>
+  {% for paragraph in display_instructions.splitlines() %}
+  {% if paragraph.strip() %}<p>{{ paragraph }}</p>{% endif %}
+  {% endfor %}
+</section>
+<section class="panel">
+  <h2>{{ t("recipe.reviews") }}</h2>
+  {% if current_user %}
+  <form method="post" action="/recipes/{{ recipe.id }}/reviews" class="stack">
+    <label>{{ t("recipe.rating") }}
+      <select name="rating">
+        <option value="1">1</option>
+        <option value="2">2</option>
+        <option value="3">3</option>
+        <option value="4">4</option>
+        <option value="5" selected>5</option>
+      </select>
+    </label>
+    <label>{{ t("recipe.comment") }} <textarea name="comment" rows="3"></textarea></label>
+    <button type="submit">{{ t("recipe.save_review") }}</button>
+  </form>
+  {% endif %}
+  {% for review in recipe.reviews %}
+  <article class="card">
+    <p><strong>{{ review.user.email }}</strong> {{ t("recipe.rating_short") }} {{ review.rating }}/5</p>
+    <p>{{ review.comment }}</p>
+    {% if current_user and (current_user.id == review.user_id or current_user.role == "admin") %}
+    <form method="post" action="/reviews/{{ review.id }}/delete">
+      <button type="submit">{{ t("recipe.delete") }}</button>
+    </form>
+    {% endif %}
+  </article>
+  {% else %}
+  <p>{{ t("recipe.no_reviews") }}</p>
+  {% endfor %}
+</section>
+{% endblock %}

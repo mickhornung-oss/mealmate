@@ -1,0 +1,67 @@
+<p class="list-summary">
+  {% if total > 0 %}
+  {{ t("pagination.results_range", start=start_item, end=end_item, total=total) }}
+  {% else %}
+  {{ t("recipe.no_results") }}
+  {% endif %}
+</p>
+<div class="cards">
+  {% for entry in recipes_data %}
+  {% set recipe = entry.recipe %}
+  {% set display_title = entry.display_title %}
+  {% set favorite_box_id = entry.favorite_box_id %}
+  <article class="card recipe-card">
+    {% set primary_image = entry.primary_image %}
+    {% set display_image_url = entry.display_image_url %}
+    {% set display_image_kind = entry.display_image_kind %}
+    {% set has_pending_change_request = entry.has_pending_change_request %}
+    {% set can_upload_direct = current_user and current_user.role == "admin" %}
+    {% set can_request_change = current_user and current_user.role != "admin" %}
+    {% set image_feedback_message = "" %}
+    {% set image_feedback_error = "" %}
+    {% include "partials/recipe_card_image.html" %}
+    <a class="card-body-link" href="/recipes/{{ recipe.id }}" aria-label="{{ t('submission.open_detail') }}: {{ display_title }}">
+      <div class="recipe-content">
+        <h3 class="recipe-title">{{ display_title }}</h3>
+        <div class="card-chips">
+          <span class="chip chip-category">{{ recipe.canonical_category or recipe.category }}</span>
+          <span class="chip chip-difficulty chip-difficulty-{{ recipe.difficulty }}">{{ difficulty_label(recipe.difficulty) }}</span>
+          <span class="chip chip-time">{{ recipe.prep_time_minutes }} min</span>
+        </div>
+      </div>
+    </a>
+    <div class="recipe-footer">
+      <p class="rating-line">* {{ t("recipe.rating_short") }} {{ "%.2f"|format(entry.avg_rating) }} ({{ entry.review_count }})</p>
+      {% set is_favorite = entry.is_favorite %}
+      {% include "partials/favorite_button.html" %}
+    </div>
+  </article>
+  {% endfor %}
+</div>
+{% if pages > 1 %}
+{% set filter_query = "per_page=" ~ per_page ~ "&sort=" ~ (sort|urlencode) ~ "&title=" ~ (title|urlencode) ~ "&category=" ~ (category|urlencode) ~ "&difficulty=" ~ (difficulty|urlencode) ~ "&ingredient=" ~ (ingredient|urlencode) ~ "&image_filter=" ~ (image_filter|urlencode) %}
+<div class="pagination">
+  <div class="pagination-links">
+    {% if page > 1 %}
+    <a href="/?page={{ page - 1 }}&{{ filter_query }}" hx-get="/?page={{ page - 1 }}&{{ filter_query }}" hx-target="#recipe-list" hx-push-url="true">{{ t("pagination.previous") }}</a>
+    {% else %}
+    <span class="disabled">{{ t("pagination.previous") }}</span>
+    {% endif %}
+    {% for item in pagination_items %}
+    {% if item is none %}
+    <span class="ellipsis">...</span>
+    {% elif item == page %}
+    <span class="active">{{ item }}</span>
+    {% else %}
+    <a href="/?page={{ item }}&{{ filter_query }}" hx-get="/?page={{ item }}&{{ filter_query }}" hx-target="#recipe-list" hx-push-url="true">{{ item }}</a>
+    {% endif %}
+    {% endfor %}
+    {% if page < pages %}
+    <a href="/?page={{ page + 1 }}&{{ filter_query }}" hx-get="/?page={{ page + 1 }}&{{ filter_query }}" hx-target="#recipe-list" hx-push-url="true">{{ t("pagination.next") }}</a>
+    {% else %}
+    <span class="disabled">{{ t("pagination.next") }}</span>
+    {% endif %}
+  </div>
+  <span class="pagination-info">{{ t("pagination.page") }} {{ page }} / {{ total_pages }}</span>
+</div>
+{% endif %}

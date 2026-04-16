@@ -1,21 +1,20 @@
 # MealMate
 
-Production-nahe FastAPI Web-App mit server-rendered HTML (Jinja2), HTMX, SQLAlchemy 2.0, Alembic, JWT-Auth und SQLite/Postgres-Unterstuetzung.
+Production-grade FastAPI web app with server-rendered HTML (Jinja2), HTMX, SQLAlchemy 2.0, Alembic, JWT authentication, and SQLite/PostgreSQL support.
 
-## Features
+**Features:**
+- Register/Login/Logout with JWT in HttpOnly cookies  
+- Role-based access: `user` and `admin`  
+- Recipe CRUD (owner or admin)  
+- Recipe discovery with filters, sorting, pagination, and HTMX partial updates  
+- Normalized ingredients via `ingredients` and `recipe_ingredients` tables  
+- Reviews (1-5 stars) with average rating and count  
+- Favorites system  
+- Image upload to database with MIME and size validation  
+- Admin CSV/JSON recipe import with robust field mapping  
+- PDF recipe export via ReportLab  
 
-- Register/Login/Logout mit JWT in HttpOnly-Cookie
-- Rollen: `user` und `admin`
-- Rezept-CRUD (Owner oder Admin)
-- Discover mit Filtern, Sortierung, Pagination und HTMX-Partial-Updates
-- Zutaten normalisiert ueber `ingredients` und `recipe_ingredients`
-- Reviews (1-5), Durchschnitts-Rating und Review-Count
-- Favoriten
-- Bild-Upload in DB (`recipe_images`), MIME- und Groessen-Checks
-- Admin-Import (`/admin/import-recipes`) fuer CSV/JSON mit robustem Feld-Mapping
-- PDF-Download je Rezept (`/recipes/{id}/pdf`) via ReportLab
-
-## Lokal starten
+## Quick Start (Local)
 
 ```bash
 py -m venv .venv
@@ -27,25 +26,26 @@ py scripts/seed_admin.py
 py -m uvicorn app.main:app --reload
 ```
 
-App: http://localhost:8000  
-Admin Login: `admin@mealmate.local` / `AdminPass123!`
+**Access:**
+- App: http://localhost:8000  
+- Admin: `admin@mealmate.local` / `AdminPass123!`
 
-## Docker starten
+## Docker
 
 ```bash
 docker compose up --build
 ```
 
-## KochWiki CSV importieren
+## API Endpoints
 
-```bash
-py scripts/import_csv_to_db.py --file rezepte_kochwiki_clean_3713.csv
-```
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| POST | `/recipes/{id}/images` | Owner/Admin | Upload recipe image |
+| GET | `/images/{image_id}` | Public | Fetch image |
+| DELETE | `/images/{image_id}` | Owner/Admin | Delete image |
+| POST | `/admin/import-recipes` | Admin | Bulk import CSV/JSON |
+| GET | `/recipes/{id}/pdf` | Public | Export recipe as PDF |
 
-## Wichtige Endpunkte
+## Known Audit Exceptions
 
-- `POST /recipes/{id}/images` (Owner/Admin)
-- `GET /images/{image_id}`
-- `DELETE /images/{image_id}` (Owner/Admin)
-- `POST /admin/import-recipes` (Admin)
-- `GET /recipes/{id}/pdf`
+- `starlette` & `js2py`: Upstream has open security advisories, stack migration pending

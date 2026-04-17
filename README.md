@@ -1,26 +1,29 @@
 # MealMate
 
-**Current release:** `v1.0.0`  
-**Status:** Production-ready baseline (self-hosted), release-governed, and reproducible.
+MealMate is a FastAPI application for recipe management with a server-rendered UI (Jinja2 + HTMX), moderation workflows, and translation support.
 
-MealMate is a FastAPI web application for recipe management with a server-rendered UI (Jinja2 + HTMX), moderation workflows, translation support, and hardened operational contracts.
+**Release:** `v1.0.0`  
+**Status:** Production-ready baseline (self-hosted)
 
-## Core Capabilities
-- JWT cookie authentication with CSRF protection
-- Recipe CRUD, favorites, ratings, PDF export
-- Moderation workflow for recipe submissions and image-change requests
+**Demo:** No public hosted instance is provided. The application is intended to run locally using the Quickstart instructions below.
+
+## Features
+- JWT cookie-based authentication with CSRF protection
+- Recipe CRUD, favorites, ratings, and PDF export
+- Moderation workflow for recipe submissions and image change requests
 - CSV-based recipe import
-- Translation workflow for `de`, `en`, `fr`
+- Translation workflow for `de`, `en`, and `fr`
 
 ## Tech Stack
-- Python 3.12, FastAPI, SQLAlchemy 2, Alembic
+- Python 3.12
+- FastAPI, SQLAlchemy 2, Alembic
 - Jinja2, HTMX
-- SQLite for local development, PostgreSQL for deployment
-- Pytest (plus optional Playwright browser E2E)
-- Docker / Docker Compose
+- SQLite (local development), PostgreSQL (deployment)
+- Pytest, optional Playwright browser E2E
+- Docker, Docker Compose
 
-## Quickstart (Local)
-Windows:
+## Quickstart
+### Windows
 ```bash
 py -3.12 -m venv .venv
 .venv\Scripts\activate
@@ -32,7 +35,7 @@ python scripts/seed_admin.py
 python -m uvicorn app.main:app --reload
 ```
 
-macOS/Linux:
+### macOS / Linux
 ```bash
 python3.12 -m venv .venv
 source .venv/bin/activate
@@ -44,10 +47,12 @@ python scripts/seed_admin.py
 python -m uvicorn app.main:app --reload
 ```
 
-Access:
-- App: `http://localhost:8000`
-- Health: `http://localhost:8000/healthz`
-- Admin seed user: `admin@mealmate.local` / `AdminPass123!`
+## Access
+- Application: `http://localhost:8000`
+- Health endpoint: `http://localhost:8000/healthz`
+- Default admin credentials (after running `scripts/seed_admin.py`):
+  - Email: `admin@mealmate.local`
+  - Password: `AdminPass123!`
 
 ## Configuration
 Copy `.env.example` to `.env` and review at least:
@@ -57,48 +62,52 @@ Copy `.env.example` to `.env` and review at least:
 - `ALLOWED_HOSTS`
 - `KOCHWIKI_CSV_PATH` (default: `data/seed/rezepte_kochwiki_clean_3713.csv`)
 - `COOKIE_SECURE` and `FORCE_HTTPS` for production
-- `PORT`, `WEB_CONCURRENCY`, `WEB_TIMEOUT` for container/runtime behavior
+- `PORT`, `WEB_CONCURRENCY`, `WEB_TIMEOUT` for runtime behavior
 
 ## Quality Gates
 ```bash
+python -m compileall app tests
 pytest -q
 pytest -q -W error
-python -m compileall app tests
 ```
 
 Playwright note:
-- Browser E2E tests are skipped automatically if browser binaries are missing.
-- Enable locally with: `python -m playwright install chromium`
+- Browser E2E tests are skipped automatically if browser binaries are not installed.
+- Install browser binaries locally with:
+```bash
+python -m playwright install chromium
+```
 
 ## Deployment
-- Local container run: `docker compose up --build`
-- Deployment baseline: `docs/deployment/DEPLOYMENT.md`
-- Security verification: `docs/deployment/SECURITY.md`
-- Operability diagnostics: `docs/development/OPERABILITY.md`
+- Local container run:
+```bash
+docker compose up --build
+```
+- Deployment guide: `docs/deployment/DEPLOYMENT.md`
+- Security checklist: `docs/deployment/SECURITY.md`
+- Operability guide: `docs/development/OPERABILITY.md`
 
-## Release Governance
-- Changelog: `CHANGELOG.md`
+## Documentation
+- Documentation index: `docs/README.md`
+- Setup guide: `docs/development/SETUP.md`
+- Testing guide: `docs/development/TESTING.md`
 - Release process: `docs/development/RELEASE.md`
-- Release gate checklist: `docs/development/RELEASE_CHECKLIST.md`
+- Release checklist: `docs/development/RELEASE_CHECKLIST.md`
+- Changelog: `CHANGELOG.md`
+- Contributing: `CONTRIBUTING.md`
+- Internal docs boundary: `docs/internal/README.md`
 
 ## Repository Structure
 ```text
 app/            application code (routers, services, templates, static)
 alembic/        database migrations
 tests/          test suite (unit/integration/e2e)
-scripts/        developer/operator scripts
-tools/          diagnostics and maintenance tooling
-docs/           public and internal project documentation
-data/seed/      local seed/import data
+scripts/        developer and operator scripts
+tools/          diagnostics and maintenance tools
+docs/           public and internal documentation
+data/seed/      local seed and import data
 ```
 
 ## Known Limitations
 - SQLite is for local development only; production requires PostgreSQL.
-- Playwright browser tests require local browser installation and are otherwise skipped.
-
-## Documentation
-- Main docs index: `docs/README.md`
-- Setup baseline: `docs/development/SETUP.md`
-- Testing baseline: `docs/development/TESTING.md`
-- Internal documentation boundary: `docs/internal/README.md`
-- Contribution guide: `CONTRIBUTING.md`
+- Playwright browser tests require local browser binaries and are otherwise skipped.

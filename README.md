@@ -2,6 +2,9 @@
 
 MealMate is a FastAPI application for recipe management with a server-rendered UI (Jinja2 + HTMX), moderation workflows, and translation support.
 
+![MealMate Main UI](assets/screenshots/mealmate_main.png)
+![MealMate Moderation Queue](assets/screenshots/mealmate_detail.png)
+
 **Release:** `v1.0.0`  
 **Status:** Production-ready baseline (self-hosted)
 

@@ -8,7 +8,7 @@ from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore", case_sensitive=False)
 
-    app_name: str = "Kitchen Hell and Heaven"
+    app_name: str = "MealMate"
     app_env: Literal["dev", "prod"] = "dev"
     app_url: AnyHttpUrl = "http://localhost:8000"
     secret_key: str = "change-me"
@@ -49,7 +49,7 @@ class Settings(BaseSettings):
     security_event_max_rows: int = 5000
     enable_kochwiki_seed: bool = False
     auto_seed_kochwiki: bool = False
-    kochwiki_csv_path: str = "rezepte_kochwiki_clean_3713.csv"
+    kochwiki_csv_path: str = "data/seed/rezepte_kochwiki_clean_3713.csv"
     import_download_images: bool = False
     seed_admin_email: str = "admin@mealmate.local"
     seed_admin_password: str = "AdminPass123!"
@@ -65,8 +65,8 @@ class Settings(BaseSettings):
     @classmethod
     def parse_app_name(cls, value: str | None) -> str:
         candidate = str(value or "").strip()
-        if not candidate or candidate in {"MealMate", "Hell's Kitchen and Heaven"}:
-            return "Kitchen Hell and Heaven"
+        if not candidate:
+            return "MealMate"
         return candidate
 
     @field_validator("allowed_hosts", mode="before")

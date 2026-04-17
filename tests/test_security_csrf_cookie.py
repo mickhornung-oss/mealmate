@@ -153,7 +153,7 @@ def test_login_cookie_flags_http_only_same_site_and_secure_override(client, db_s
     try:
         auth_router.settings.cookie_secure = True
         csrf = "csrf-secure-test-token"
-        client.cookies.set("csrf_token", csrf)
+        client.cookies.set("csrf_token", csrf, domain="testserver.local", path="/")
         response_secure = client.post(
             "/login",
             data={
@@ -200,7 +200,7 @@ def test_old_token_invalid_after_password_change(client, db_session_factory):
     )
     assert changed.status_code in {302, 303}
 
-    client.cookies.set("access_token", old_token)
+    client.cookies.set("access_token", old_token, domain="testserver.local", path="/")
     old_session = client.get("/api/me")
     assert old_session.status_code == 401
 
@@ -251,7 +251,7 @@ def test_old_token_invalid_after_password_reset(client, db_session_factory, tmp_
         )
         assert reset.status_code in {302, 303}
 
-        client.cookies.set("access_token", old_token)
+        client.cookies.set("access_token", old_token, domain="testserver.local", path="/")
         old_session = client.get("/api/me")
         assert old_session.status_code == 401
     finally:

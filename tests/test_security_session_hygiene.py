@@ -56,7 +56,7 @@ def test_password_change_invalidates_previous_session_token(client, db_session_f
     )
     assert changed.status_code in {302, 303}
 
-    client.cookies.set("access_token", old_token)
+    client.cookies.set("access_token", old_token, domain="testserver.local", path="/")
     assert client.get("/api/me").status_code == 401
 
 

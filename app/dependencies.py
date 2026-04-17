@@ -15,8 +15,29 @@ from app.services import extract_token
 settings = get_settings()
 
 
+def _latest_cookie_value(request: Request, name: str) -> str | None:
+    raw_cookie_header = request.headers.get("cookie", "")
+    if raw_cookie_header:
+        values: list[str] = []
+        for chunk in raw_cookie_header.split(";"):
+            key, separator, value = chunk.partition("=")
+            if separator != "=":
+                continue
+            if key.strip() != name:
+                continue
+            candidate = value.strip().strip('"')
+            if candidate:
+                values.append(candidate)
+        if values:
+            return values[-1]
+    value = request.cookies.get(name)
+    if value:
+        return str(value)
+    return None
+
+
 def get_current_user_optional(request: Request, db: Session = Depends(get_db)) -> User | None:
-    cookie_token = request.cookies.get("access_token")
+    cookie_token = _latest_cookie_value(request, "access_token")
     header_token = extract_token(request.headers.get("Authorization"))
     raw_token = cookie_token or header_token
     token = extract_token(raw_token)
@@ -50,9 +71,27 @@ def get_current_user(request: Request, db: Session = Depends(get_db)) -> User:
     return user
 
 
-def get_admin_user(current_user: User = Depends(get_current_user)) -> User:
+def ensure_admin_or_403(current_user: User, *, request: Request | None = None) -> None:
     if current_user.role != "admin":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=t("error.admin_required"))
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=t("error.admin_required", request=request))
+
+
+def ensure_owner_or_admin_or_404(
+    current_user: User,
+    *,
+    owner_user_id: int | None,
+    request: Request | None = None,
+    not_found_key: str = "error.not_found",
+) -> None:
+    if current_user.role == "admin":
+        return
+    if owner_user_id is not None and owner_user_id == current_user.id:
+        return
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=t(not_found_key, request=request))
+
+
+def get_admin_user(current_user: User = Depends(get_current_user)) -> User:
+    ensure_admin_or_403(current_user)
     return current_user
 
 

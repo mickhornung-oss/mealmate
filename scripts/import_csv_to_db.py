@@ -37,7 +37,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Import KochWiki CSV into MealMate database.")
     parser.add_argument(
         "--file",
-        default="rezepte_kochwiki_clean_3713.csv",
+        default="data/seed/rezepte_kochwiki_clean_3713.csv",
         help="Path to source CSV.",
     )
     parser.add_argument(

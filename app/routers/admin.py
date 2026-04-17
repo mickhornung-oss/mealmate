@@ -4,7 +4,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, Response, UploadFile, status
 from fastapi.responses import Response as RawResponse
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.category_canonical import build_category_qa_rows, rebuild_canonical_categories, validate_mapping_pattern
@@ -31,6 +31,7 @@ router = APIRouter(tags=["admin"])
 settings = get_settings()
 logger = logging.getLogger("mealmate.admin")
 IMAGE_CHANGE_PAGE_SIZE = 20
+IMAGE_CHANGE_STATUS_FILTERS = {"pending", "approved", "rejected", "all"}
 
 
 def get_recipe_primary_image(recipe: Recipe) -> RecipeImage | None:
@@ -64,6 +65,111 @@ def fetch_image_change_request_or_404(db: Session, request_id: int) -> RecipeIma
     return image_change_request
 
 
+def claim_image_change_transition_or_conflict(
+    db: Session,
+    *,
+    request_id: int,
+    target_status: str,
+    admin_id: int,
+    admin_note: str,
+    request_trace_id: str = "-",
+) -> None:
+    claim_result = db.execute(
+        update(RecipeImageChangeRequest)
+        .where(RecipeImageChangeRequest.id == request_id, RecipeImageChangeRequest.status == "pending")
+        .values(
+            status=target_status,
+            admin_note=admin_note.strip() or None,
+            reviewed_by_admin_id=admin_id,
+            reviewed_at=datetime.now(timezone.utc),
+        )
+    )
+    if int(claim_result.rowcount or 0) == 0:
+        logger.warning(
+            "image_change_transition_conflict request_trace_id=%s request_id=%s target_status=%s admin_id=%s",
+            request_trace_id,
+            request_id,
+            target_status,
+            admin_id,
+        )
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=t("error.image_change_request_not_pending"))
+    logger.info(
+        "image_change_transition_claimed request_trace_id=%s request_id=%s target_status=%s admin_id=%s",
+        request_trace_id,
+        request_id,
+        target_status,
+        admin_id,
+    )
+
+
+def normalize_image_change_status_filter(value: str) -> str:
+    return value if value in IMAGE_CHANGE_STATUS_FILTERS else "pending"
+
+
+def resolve_paged_request(*, requested_page: int, total_count: int, page_size: int) -> tuple[int, int]:
+    total_pages = max((total_count + page_size - 1) // page_size, 1)
+    page = min(max(requested_page, 1), total_pages)
+    return page, total_pages
+
+
+def build_image_change_status_stats(db: Session) -> dict[str, int]:
+    status_rows = db.execute(
+        select(RecipeImageChangeRequest.status, func.count(RecipeImageChangeRequest.id)).group_by(
+            RecipeImageChangeRequest.status
+        )
+    ).all()
+    stats = {"pending": 0, "approved": 0, "rejected": 0}
+    for row_status, count in status_rows:
+        stats[str(row_status)] = int(count)
+    return stats
+
+
+def load_pending_image_change_requests(db: Session, *, limit: int = 8) -> tuple[list[RecipeImageChangeRequest], int]:
+    rows = db.scalars(
+        select(RecipeImageChangeRequest)
+        .where(RecipeImageChangeRequest.status == "pending")
+        .order_by(RecipeImageChangeRequest.created_at.desc())
+        .limit(limit)
+        .options(
+            joinedload(RecipeImageChangeRequest.recipe),
+            joinedload(RecipeImageChangeRequest.requester_user),
+        )
+    ).all()
+    count = int(
+        db.scalar(select(func.count()).select_from(RecipeImageChangeRequest).where(RecipeImageChangeRequest.status == "pending"))
+        or 0
+    )
+    return rows, count
+
+
+def build_image_change_detail_context(
+    request: Request,
+    current_user: User,
+    image_change_request: RecipeImageChangeRequest,
+    *,
+    message: str = "",
+):
+    recipe = image_change_request.recipe
+    recipe_primary_image = get_recipe_primary_image(recipe)
+    current_image_url = f"/images/{recipe_primary_image.id}" if recipe_primary_image else get_recipe_external_image_url(recipe)
+    current_image_kind = "db" if recipe_primary_image else ("external" if current_image_url else "placeholder")
+    proposed_file = image_change_request.files[0] if image_change_request.files else None
+    message_map = {
+        "approved": t("image_change.approved", request=request),
+        "rejected": t("image_change.rejected", request=request),
+    }
+    return template_context(
+        request,
+        current_user,
+        image_change_request=image_change_request,
+        recipe=recipe,
+        current_image_url=current_image_url,
+        current_image_kind=current_image_kind,
+        proposed_file=proposed_file,
+        message=message_map.get(message, ""),
+    )
+
+
 def admin_dashboard_context(
     request: Request,
     db: Session,
@@ -80,20 +186,7 @@ def admin_dashboard_context(
     recipes = db.scalars(
         select(Recipe).order_by(Recipe.created_at.desc()).options(selectinload(Recipe.creator))
     ).all()
-    pending_image_change_requests = db.scalars(
-        select(RecipeImageChangeRequest)
-        .where(RecipeImageChangeRequest.status == "pending")
-        .order_by(RecipeImageChangeRequest.created_at.desc())
-        .limit(8)
-        .options(
-            joinedload(RecipeImageChangeRequest.recipe),
-            joinedload(RecipeImageChangeRequest.requester_user),
-        )
-    ).all()
-    pending_image_change_count = db.scalar(
-        select(func.count()).select_from(RecipeImageChangeRequest).where(RecipeImageChangeRequest.status == "pending")
-    )
-    pending_image_change_count = int(pending_image_change_count or 0)
+    pending_image_change_requests, pending_image_change_count = load_pending_image_change_requests(db, limit=8)
     de_audit = audit_german_translations(db, limit=5, persist_flags=False)
     distinct_category_count, top_categories = get_category_stats(db, limit=10)
     logger.info(
@@ -121,13 +214,45 @@ def admin_dashboard_context(
     )
 
 
+def render_admin_dashboard(
+    request: Request,
+    db: Session,
+    current_user: User,
+    *,
+    status_code: int = status.HTTP_200_OK,
+    report=None,
+    preview_report=None,
+    error: str | None = None,
+    message: str | None = None,
+    import_mode: str = "insert_only",
+    import_dry_run: bool = False,
+    import_force_with_warnings: bool = False,
+):
+    return templates.TemplateResponse(
+        "admin.html",
+        admin_dashboard_context(
+            request,
+            db,
+            current_user,
+            report=report,
+            preview_report=preview_report,
+            error=error,
+            message=message,
+            import_mode=import_mode,
+            import_dry_run=import_dry_run,
+            import_force_with_warnings=import_force_with_warnings,
+        ),
+        status_code=status_code,
+    )
+
+
 @router.get("/admin")
 def admin_panel(
     request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_admin_user),
 ):
-    return templates.TemplateResponse("admin.html", admin_dashboard_context(request, db, current_user))
+    return render_admin_dashboard(request, db, current_user)
 
 
 @router.get("/admin/categories")
@@ -297,59 +422,49 @@ def run_kochwiki_seed(
     if not settings.enable_kochwiki_seed:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=t("error.not_found"))
     if is_meta_true(db, "kochwiki_seed_done"):
-        return templates.TemplateResponse(
-            "admin.html",
-            admin_dashboard_context(request, db, current_user, error=t("error.seed_already_done")),
+        return render_admin_dashboard(
+            request,
+            db,
+            current_user,
+            error=t("error.seed_already_done"),
             status_code=status.HTTP_409_CONFLICT,
         )
     recipes_count = db.scalar(select(func.count()).select_from(Recipe)) or 0
     if recipes_count > 0:
-        return templates.TemplateResponse(
-            "admin.html",
-            admin_dashboard_context(
-                request,
-                db,
-                current_user,
-                error=t("error.seed_not_empty"),
-            ),
+        return render_admin_dashboard(
+            request,
+            db,
+            current_user,
+            error=t("error.seed_not_empty"),
             status_code=status.HTTP_409_CONFLICT,
         )
     seed_path = Path(settings.kochwiki_csv_path)
     if not seed_path.exists():
-        return templates.TemplateResponse(
-            "admin.html",
-            admin_dashboard_context(
-                request,
-                db,
-                current_user,
-                error=f"{t('error.csv_not_found_prefix')}: {seed_path}",
-            ),
+        return render_admin_dashboard(
+            request,
+            db,
+            current_user,
+            error=f"{t('error.csv_not_found_prefix')}: {seed_path}",
             status_code=status.HTTP_400_BAD_REQUEST,
         )
     report = import_kochwiki_csv(db, seed_path, current_user.id, mode="insert_only")
     if report.errors:
-        return templates.TemplateResponse(
-            "admin.html",
-            admin_dashboard_context(
-                request,
-                db,
-                current_user,
-                report=report,
-                error=t("error.seed_finished_errors"),
-            ),
-            status_code=status.HTTP_400_BAD_REQUEST,
-        )
-    set_meta_value(db, "kochwiki_seed_done", "1")
-    db.commit()
-    return templates.TemplateResponse(
-        "admin.html",
-        admin_dashboard_context(
+        return render_admin_dashboard(
             request,
             db,
             current_user,
             report=report,
-            message=t("error.seed_success"),
-        ),
+            error=t("error.seed_finished_errors"),
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+    set_meta_value(db, "kochwiki_seed_done", "1")
+    db.commit()
+    return render_admin_dashboard(
+        request,
+        db,
+        current_user,
+        report=report,
+        message=t("error.seed_success"),
     )
 
 
@@ -393,61 +508,49 @@ async def import_recipes_admin(
             autocommit=False,
         )
         if action == "preview":
-            return templates.TemplateResponse(
-                "admin.html",
-                admin_dashboard_context(
-                    request,
-                    db,
-                    current_user,
-                    preview_report=preview_report,
-                    message=t("admin.preview_done"),
-                    import_mode=mode,
-                    import_dry_run=dry_run_flag,
-                    import_force_with_warnings=force_warnings_flag,
-                ),
+            return render_admin_dashboard(
+                request,
+                db,
+                current_user,
+                preview_report=preview_report,
+                message=t("admin.preview_done"),
+                import_mode=mode,
+                import_dry_run=dry_run_flag,
+                import_force_with_warnings=force_warnings_flag,
             )
         if preview_report.fatal_error_rows > 0:
-            return templates.TemplateResponse(
-                "admin.html",
-                admin_dashboard_context(
-                    request,
-                    db,
-                    current_user,
-                    preview_report=preview_report,
-                    error=t("admin.import_blocked_errors"),
-                    import_mode=mode,
-                    import_dry_run=dry_run_flag,
-                    import_force_with_warnings=force_warnings_flag,
-                ),
+            return render_admin_dashboard(
+                request,
+                db,
+                current_user,
+                preview_report=preview_report,
+                error=t("admin.import_blocked_errors"),
+                import_mode=mode,
+                import_dry_run=dry_run_flag,
+                import_force_with_warnings=force_warnings_flag,
                 status_code=status.HTTP_400_BAD_REQUEST,
             )
         if dry_run_flag:
-            return templates.TemplateResponse(
-                "admin.html",
-                admin_dashboard_context(
-                    request,
-                    db,
-                    current_user,
-                    preview_report=preview_report,
-                    message=t("admin.dry_run_done"),
-                    import_mode=mode,
-                    import_dry_run=dry_run_flag,
-                    import_force_with_warnings=force_warnings_flag,
-                ),
+            return render_admin_dashboard(
+                request,
+                db,
+                current_user,
+                preview_report=preview_report,
+                message=t("admin.dry_run_done"),
+                import_mode=mode,
+                import_dry_run=dry_run_flag,
+                import_force_with_warnings=force_warnings_flag,
             )
         if preview_report.warnings and not force_warnings_flag:
-            return templates.TemplateResponse(
-                "admin.html",
-                admin_dashboard_context(
-                    request,
-                    db,
-                    current_user,
-                    preview_report=preview_report,
-                    error=t("admin.confirm_warnings_required"),
-                    import_mode=mode,
-                    import_dry_run=dry_run_flag,
-                    import_force_with_warnings=force_warnings_flag,
-                ),
+            return render_admin_dashboard(
+                request,
+                db,
+                current_user,
+                preview_report=preview_report,
+                error=t("admin.confirm_warnings_required"),
+                import_mode=mode,
+                import_dry_run=dry_run_flag,
+                import_force_with_warnings=force_warnings_flag,
                 status_code=status.HTTP_400_BAD_REQUEST,
             )
         report = import_admin_csv(
@@ -460,33 +563,27 @@ async def import_recipes_admin(
         )
         db.commit()
         message = t("error.import_finished_insert") if mode == "insert_only" else t("error.import_finished_update")
-        return templates.TemplateResponse(
-            "admin.html",
-            admin_dashboard_context(
-                request,
-                db,
-                current_user,
-                report=report,
-                preview_report=report,
-                message=message,
-                import_mode=mode,
-                import_dry_run=dry_run_flag,
-                import_force_with_warnings=force_warnings_flag,
-            ),
+        return render_admin_dashboard(
+            request,
+            db,
+            current_user,
+            report=report,
+            preview_report=report,
+            message=message,
+            import_mode=mode,
+            import_dry_run=dry_run_flag,
+            import_force_with_warnings=force_warnings_flag,
         )
     except (FileNotFoundError, ValueError) as exc:
         db.rollback()
-        return templates.TemplateResponse(
-            "admin.html",
-            admin_dashboard_context(
-                request,
-                db,
-                current_user,
-                error=str(exc),
-                import_mode=mode,
-                import_dry_run=dry_run_flag,
-                import_force_with_warnings=force_warnings_flag,
-            ),
+        return render_admin_dashboard(
+            request,
+            db,
+            current_user,
+            error=str(exc),
+            import_mode=mode,
+            import_dry_run=dry_run_flag,
+            import_force_with_warnings=force_warnings_flag,
             status_code=status.HTTP_400_BAD_REQUEST,
         )
     except Exception:
@@ -518,10 +615,7 @@ def admin_image_change_requests(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_admin_user),
 ):
-    page = max(page, 1)
-    valid_statuses = {"pending", "approved", "rejected", "all"}
-    if status_filter not in valid_statuses:
-        status_filter = "pending"
+    status_filter = normalize_image_change_status_filter(status_filter)
     stmt = (
         select(RecipeImageChangeRequest)
         .order_by(RecipeImageChangeRequest.created_at.desc())
@@ -537,17 +631,13 @@ def admin_image_change_requests(
         stmt = stmt.where(RecipeImageChangeRequest.status == status_filter)
         count_stmt = count_stmt.where(RecipeImageChangeRequest.status == status_filter)
     total_count = int(db.scalar(count_stmt) or 0)
-    total_pages = max((total_count + IMAGE_CHANGE_PAGE_SIZE - 1) // IMAGE_CHANGE_PAGE_SIZE, 1)
-    page = min(page, total_pages)
+    page, total_pages = resolve_paged_request(
+        requested_page=page,
+        total_count=total_count,
+        page_size=IMAGE_CHANGE_PAGE_SIZE,
+    )
     requests = db.scalars(stmt.offset((page - 1) * IMAGE_CHANGE_PAGE_SIZE).limit(IMAGE_CHANGE_PAGE_SIZE)).all()
-    status_rows = db.execute(
-        select(RecipeImageChangeRequest.status, func.count(RecipeImageChangeRequest.id)).group_by(
-            RecipeImageChangeRequest.status
-        )
-    ).all()
-    status_stats = {"pending": 0, "approved": 0, "rejected": 0}
-    for row_status, count in status_rows:
-        status_stats[str(row_status)] = int(count)
+    status_stats = build_image_change_status_stats(db)
     return templates.TemplateResponse(
         "admin_image_change_requests.html",
         template_context(
@@ -572,26 +662,13 @@ def admin_image_change_request_detail(
     current_user: User = Depends(get_admin_user),
 ):
     image_change_request = fetch_image_change_request_or_404(db, request_id)
-    recipe = image_change_request.recipe
-    recipe_primary_image = get_recipe_primary_image(recipe)
-    current_image_url = f"/images/{recipe_primary_image.id}" if recipe_primary_image else get_recipe_external_image_url(recipe)
-    current_image_kind = "db" if recipe_primary_image else ("external" if current_image_url else "placeholder")
-    proposed_file = image_change_request.files[0] if image_change_request.files else None
-    message_map = {
-        "approved": t("image_change.approved", request=request),
-        "rejected": t("image_change.rejected", request=request),
-    }
     return templates.TemplateResponse(
         "admin_image_change_request_detail.html",
-        template_context(
+        build_image_change_detail_context(
             request,
             current_user,
-            image_change_request=image_change_request,
-            recipe=recipe,
-            current_image_url=current_image_url,
-            current_image_kind=current_image_kind,
-            proposed_file=proposed_file,
-            message=message_map.get(message, ""),
+            image_change_request,
+            message=message,
         ),
     )
 
@@ -605,12 +682,19 @@ def admin_image_change_request_approve(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_admin_user),
 ):
+    request_trace_id = getattr(getattr(request, "state", None), "request_id", "-")
     image_change_request = fetch_image_change_request_or_404(db, request_id)
-    if image_change_request.status != "pending":
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=t("error.image_change_request_not_pending"))
     proposed_file = image_change_request.files[0] if image_change_request.files else None
     if not proposed_file:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=t("error.image_change_file_missing"))
+    claim_image_change_transition_or_conflict(
+        db,
+        request_id=image_change_request.id,
+        target_status="approved",
+        admin_id=current_user.id,
+        admin_note=admin_note,
+        request_trace_id=request_trace_id,
+    )
     recipe = image_change_request.recipe
     for image in recipe.images:
         image.is_primary = False
@@ -623,11 +707,14 @@ def admin_image_change_request_approve(
             is_primary=True,
         )
     )
-    image_change_request.status = "approved"
-    image_change_request.admin_note = admin_note.strip() or None
-    image_change_request.reviewed_by_admin_id = current_user.id
-    image_change_request.reviewed_at = datetime.now(timezone.utc)
     db.commit()
+    logger.info(
+        "image_change_approve_completed request_trace_id=%s request_id=%s recipe_id=%s admin_id=%s",
+        request_trace_id,
+        request_id,
+        recipe.id,
+        current_user.id,
+    )
     _ = request
     return redirect(f"/admin/image-change-requests/{request_id}?message=approved")
 
@@ -641,16 +728,25 @@ def admin_image_change_request_reject(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_admin_user),
 ):
+    request_trace_id = getattr(getattr(request, "state", None), "request_id", "-")
     image_change_request = fetch_image_change_request_or_404(db, request_id)
-    if image_change_request.status != "pending":
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=t("error.image_change_request_not_pending"))
     if not admin_note.strip():
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=t("error.submission_reject_reason_required"))
-    image_change_request.status = "rejected"
-    image_change_request.admin_note = admin_note.strip()
-    image_change_request.reviewed_by_admin_id = current_user.id
-    image_change_request.reviewed_at = datetime.now(timezone.utc)
+    claim_image_change_transition_or_conflict(
+        db,
+        request_id=image_change_request.id,
+        target_status="rejected",
+        admin_id=current_user.id,
+        admin_note=admin_note,
+        request_trace_id=request_trace_id,
+    )
     db.commit()
+    logger.info(
+        "image_change_reject_completed request_trace_id=%s request_id=%s admin_id=%s",
+        request_trace_id,
+        request_id,
+        current_user.id,
+    )
     _ = request
     return redirect(f"/admin/image-change-requests/{request_id}?message=rejected")
 

@@ -1,4 +1,5 @@
 .venv/
+.venv*/
 __pycache__/
 *.pyc
 *.pyo
@@ -19,6 +20,7 @@ htmlcov/
 *.sqlite3
 outbox/
 backups/
+diagnostics/
 tmp/
 dist/
 build/

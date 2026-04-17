@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import os
+import sqlite3
+from datetime import datetime
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -11,6 +13,10 @@ from alembic.script import ScriptDirectory
 from sqlalchemy import create_engine
 
 from app.config import get_settings
+
+# Python 3.12 deprecates sqlite's implicit datetime adapter.
+# Register explicit adapters for migration tests to keep behavior explicit and warning-free.
+sqlite3.register_adapter(datetime, lambda value: value.isoformat(sep=" "))
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]

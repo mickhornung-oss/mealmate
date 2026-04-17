@@ -134,4 +134,4 @@ def create_pending_submission(
 
 def set_auth_cookie(client: TestClient, user_uid: str, role: str) -> None:
     token = create_access_token(user_uid, role)
-    client.cookies.set("access_token", f"Bearer {token}")
+    client.cookies.set("access_token", f"Bearer {token}", domain="testserver.local", path="/")

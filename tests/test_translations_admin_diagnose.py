@@ -39,7 +39,7 @@ def test_admin_translation_test_route_renders_mock_result_when_enabled(client, d
         response = post_form(client, "/admin/translations/test", referer_page="/admin/translations")
         assert response.status_code == 200
         assert "Testübersetzung erfolgreich." in response.text
-        assert "fake:en:Hello from Kitchen Hell and Heaven" in response.text
-        assert "fake:fr:Hello from Kitchen Hell and Heaven" in response.text
+        assert "fake:en:Hello from MealMate" in response.text
+        assert "fake:fr:Hello from MealMate" in response.text
     finally:
         set_translation_provider_for_testing(None)

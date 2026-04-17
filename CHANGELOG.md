@@ -1,31 +1,31 @@
 # Changelog
 
-Alle nennenswerten Aenderungen an MealMate werden hier dokumentiert.
+All notable changes to this project are documented in this file.
 
-## [Unreleased]
+The format is based on Keep a Changelog and follows Semantic Versioning.
+
+## [v1.0.0] - 2026-04-17
 
 ### Added
-- Moderationsworkflow fuer Rezepteinreichungen mit Pending/Approve/Reject.
-- Bildaenderungs-Moderation mit separater Admin-Queue.
-- PDF Download pro Rezept.
-- Auth-Verbesserungen mit Username-Login, Passwort-Recovery und E-Mail-Aenderung per Token.
-- i18n Basis mit `de`, `en`, `fr` und Sprachaufloesung ueber Query/Cookie/Header.
-- Playwright-basierte E2E Test-Suite unter `tests/e2e/`.
-- Mini-Tools `tools.print_routes` und `tools.dump_db_schema`.
+- Established a professional public repository baseline with consolidated root structure and documentation architecture.
+- Added reproducible setup, testing, deployment, operability, and security documentation under `docs/`.
+- Added a stable CI baseline with warning-strict test coverage (`pytest -q -W error`).
+- Added targeted contract/regression tests for write paths, read/query/render paths, API/error behavior, auth/permission checks, and state/conflict/idempotency boundaries.
+- Added a dedicated release-readiness contract test suite for environment and operability documentation guarantees.
 
 ### Changed
-- Discover zeigt nur publizierte Rezepte.
-- Direkte Rezeptveroeffentlichung ist auf Admin begrenzt.
-- Bildanzeige nutzt Fallback DB-Bild -> externe URL -> Placeholder.
-- Security Header um konfigurierbares `CSP_IMG_SRC` erweitert.
+- Consolidated product identity to `MealMate` across core code paths and public-facing documentation.
+- Refined large legacy service/router areas into clearer domain/service boundaries while preserving external behavior.
+- Standardized conflict, failure, and access-denied behavior in critical router use cases without changing success-path semantics.
+- Hardened observability in critical mutation/conflict hotspots with structured operational logging and request-id correlation.
+- Consolidated environment/runtime expectations in `.env.example` and aligned setup/run/deployment docs with the validated baseline.
 
 ### Fixed
-- Publish-Bug korrigiert, damit User/Gast-Rezepte nicht mehr direkt live gehen.
-- Moderations- und Sicherheitsregeln mit zusaetzlichen Tests abgesichert.
+- Removed multiple historical contract inconsistencies around conflict handling, replay/idempotency behavior, and permission/error edges.
+- Eliminated avoidable baseline warnings and stabilized strict warning mode (`-W error`).
+- Closed documentation drift between code, CI/test gates, and operational diagnostics.
 
-## [0.1.0-beta] (geplant)
-
-### Zielbild
-- Oeffentliche Beta mit stabilen User- und Admin-Flows.
-- Reproduzierbarer Deploy auf Postgres-Umgebung.
-- Vollstaendige QA-Abnahme gemaess `docs/QA_BETA_CHECKLIST.md`.
+### Internal
+- Completed the full hardening and release-preparation audit sequence (`docs/audit/00` through `docs/audit/15`).
+- Promoted `services.py` into a compatibility/entry layer and moved domain-heavy logic into focused modules.
+- Added internal handover documentation for each hardening block to keep future maintenance decisions traceable.

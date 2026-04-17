@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import re
-import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
@@ -14,6 +12,7 @@ from sqlalchemy.orm import Session, selectinload, sessionmaker
 
 from app.config import get_settings
 from app.models import Recipe, RecipeIngredient
+import app.translation_helpers as translation_helpers
 from app.translation_provider import TranslationProvider, resolve_translation_provider
 from app.translation_models import RecipeTranslation, TranslationBatchJob
 
@@ -22,50 +21,6 @@ AUTO_TRANSLATION_NEW_RECIPES_KEY = "translation_auto_new_recipes"
 _HOOKS_REGISTERED = False
 _PROVIDER_OVERRIDE: TranslationProvider | None = None
 TERMINAL_JOB_STATUSES = {"completed", "failed", "cancelled", "timeout"}
-DE_STOPWORDS = {
-    "und",
-    "der",
-    "die",
-    "das",
-    "mit",
-    "fuer",
-    "bei",
-    "oder",
-    "ein",
-    "eine",
-    "nicht",
-    "zum",
-    "zur",
-    "auf",
-    "im",
-    "in",
-    "aus",
-    "als",
-    "dann",
-    "danach",
-    "geben",
-    "nehmen",
-    "ruehren",
-}
-EN_STOPWORDS = {
-    "the",
-    "and",
-    "with",
-    "for",
-    "from",
-    "into",
-    "in",
-    "on",
-    "then",
-    "add",
-    "stir",
-    "cook",
-    "serve",
-    "minutes",
-    "heat",
-}
-EN_MARKERS = ("serve", "heat", "stir", "add", "cook", "minutes")
-TOKEN_PATTERN = re.compile(r"[a-zA-Z]+")
 SUSPECT_FLAG = "suspect_lang_mismatch"
 OK_FLAG = "ok"
 
@@ -147,6 +102,10 @@ class TranslateApiError(RuntimeError):
     pass
 
 
+class TranslationBatchConflictError(RuntimeError):
+    pass
+
+
 def utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -187,60 +146,14 @@ def get_target_languages() -> list[str]:
     return normalized
 
 
-def _normalize_word(value: str) -> str:
-    return (
-        str(value or "")
-        .strip()
-        .lower()
-        .replace("ä", "ae")
-        .replace("ö", "oe")
-        .replace("ü", "ue")
-        .replace("ß", "ss")
-    )
-
-
-def _tokenize_text(text: str) -> list[str]:
-    return [_normalize_word(token) for token in TOKEN_PATTERN.findall(str(text or "")) if token.strip()]
-
-
-def _score_stopwords(tokens: list[str], stopwords: set[str]) -> float:
-    if not tokens:
-        return 0.0
-    hits = sum(1 for token in tokens if token in stopwords)
-    return hits / max(len(tokens), 1)
-
-
 def is_probably_english(text: str) -> bool:
-    tokens = _tokenize_text(text)
-    english_score = _score_stopwords(tokens, EN_STOPWORDS)
-    marker_hits = sum(1 for marker in EN_MARKERS if marker in _normalize_word(text))
-    return english_score >= 0.06 or marker_hits >= 2
-
+    return translation_helpers.is_probably_english(text)
 
 def is_probably_german(text: str) -> bool:
-    tokens = _tokenize_text(text)
-    german_score = _score_stopwords(tokens, DE_STOPWORDS)
-    umlaut_hint = any(char in str(text or "").lower() for char in ("ä", "ö", "ü", "ß"))
-    return german_score >= 0.02 or umlaut_hint
-
+    return translation_helpers.is_probably_german(text)
 
 def _analyze_de_translation_language(title: str, instructions: str) -> tuple[bool, float, float, int, str]:
-    combined = f"{title or ''}\n{instructions or ''}".strip()
-    normalized_text = _normalize_word(combined)
-    tokens = _tokenize_text(combined)
-    english_score = _score_stopwords(tokens, EN_STOPWORDS)
-    german_score = _score_stopwords(tokens, DE_STOPWORDS)
-    marker_hits = sum(1 for marker in EN_MARKERS if marker in normalized_text)
-    suspect = (english_score >= 0.06 and german_score <= 0.02) or marker_hits >= 2
-    reason_parts: list[str] = []
-    if english_score >= 0.06 and german_score <= 0.02:
-        reason_parts.append("english_stopword_bias")
-    if marker_hits >= 2:
-        reason_parts.append("english_markers")
-    if not reason_parts:
-        reason_parts.append("looks_german" if not suspect else "unclear")
-    return suspect, english_score, german_score, marker_hits, ",".join(reason_parts)
-
+    return translation_helpers._analyze_de_translation_language(title, instructions)
 
 def get_effective_batch_limit(limit: int | None) -> int:
     runtime_settings = get_settings()
@@ -279,98 +192,25 @@ def _build_translateapi_headers() -> dict[str, str]:
 
 
 def _unwrap_payload(payload: Any) -> dict[str, Any]:
-    if not isinstance(payload, dict):
-        return {}
-    data = payload.get("data")
-    if isinstance(data, dict):
-        return data
-    return payload
-
+    return translation_helpers._unwrap_payload(payload)
 
 def _extract_job_id(payload: Any) -> str | None:
-    top = _unwrap_payload(payload)
-    candidates = [
-        top.get("job_id"),
-        top.get("id"),
-        payload.get("job_id") if isinstance(payload, dict) else None,
-        payload.get("id") if isinstance(payload, dict) else None,
-    ]
-    job_node = top.get("job") if isinstance(top, dict) else None
-    if isinstance(job_node, dict):
-        candidates.extend([job_node.get("job_id"), job_node.get("id")])
-    for value in candidates:
-        token = str(value or "").strip()
-        if token:
-            return token
-    return None
-
+    return translation_helpers._extract_job_id(payload)
 
 def _normalize_job_status(value: Any) -> str:
-    token = str(value or "").strip().lower()
-    if token in {"queued", "pending"}:
-        return "queued"
-    if token in {"running", "processing", "in_progress", "started"}:
-        return "running"
-    if token in {"done", "success", "successful", "completed"}:
-        return "completed"
-    if token in {"error", "failed"}:
-        return "failed"
-    if token in {"cancelled", "canceled"}:
-        return "cancelled"
-    if token:
-        return token
-    return "queued"
-
+    return translation_helpers._normalize_job_status(value)
 
 def _to_int(value: Any, default: int = 0) -> int:
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return default
-
+    return translation_helpers._to_int(value, default)
 
 def _extract_progress(payload: Any, total_default: int = 0, completed_default: int = 0) -> tuple[int, int]:
-    top = _unwrap_payload(payload)
-    progress = top.get("progress") if isinstance(top, dict) else None
-    if isinstance(progress, dict):
-        total = _to_int(progress.get("total"), total_default)
-        completed = _to_int(progress.get("completed"), completed_default)
-        return max(total, 0), max(completed, 0)
-    total = _to_int(top.get("total"), total_default) if isinstance(top, dict) else total_default
-    completed = _to_int(top.get("completed"), completed_default) if isinstance(top, dict) else completed_default
-    return max(total, 0), max(completed, 0)
-
+    return translation_helpers._extract_progress(payload, total_default, completed_default)
 
 def _extract_errors(payload: Any) -> list[str]:
-    top = _unwrap_payload(payload)
-    raw_errors = []
-    if isinstance(top, dict):
-        if isinstance(top.get("errors"), list):
-            raw_errors = top["errors"]
-        elif top.get("error"):
-            raw_errors = [top.get("error")]
-    messages: list[str] = []
-    for item in raw_errors:
-        if isinstance(item, str) and item.strip():
-            messages.append(item.strip())
-            continue
-        if isinstance(item, dict):
-            text = str(item.get("message") or item.get("detail") or "").strip()
-            if text:
-                messages.append(text)
-    return messages
-
+    return translation_helpers._extract_errors(payload)
 
 def _extract_result_items(payload: Any) -> list[dict[str, Any]]:
-    top = _unwrap_payload(payload)
-    if not isinstance(top, dict):
-        return []
-    for key in ("results", "items", "translations"):
-        raw = top.get(key)
-        if isinstance(raw, list):
-            return [item for item in raw if isinstance(item, dict)]
-    return []
-
+    return translation_helpers._extract_result_items(payload)
 
 def submit_translateapi_batch_request(items: list[dict[str, Any]]) -> TranslationBatchStartResult:
     if not items:
@@ -895,76 +735,15 @@ def run_translation_batch(db: Session, *, mode: str, limit: int | None = None) -
 
 
 def _build_batch_external_id(recipe_id: int, language: str, source_hash: str) -> str:
-    return f"recipe:{recipe_id}:lang:{language}:hash:{source_hash[:12]}"
+    from app.translation_batch_service import _build_batch_external_id as _impl
+
+    return _impl(recipe_id, language, source_hash)
 
 
 def _prepare_batch_items(db: Session, *, mode: str, limit: int | None) -> tuple[list[dict[str, Any]], list[dict[str, Any]], int]:
-    normalized_mode = "stale" if str(mode).strip().lower() == "stale" else "missing"
-    source_lang = get_source_language()
-    target_languages = get_target_languages()
-    if not target_languages:
-        return [], [], 0
+    from app.translation_batch_service import _prepare_batch_items as _impl
 
-    candidate_ids = _get_candidate_recipe_ids(db, normalized_mode, target_languages)[: get_effective_batch_limit(limit)]
-    if not candidate_ids:
-        return [], [], 0
-
-    recipes = db.scalars(
-        select(Recipe)
-        .where(Recipe.id.in_(candidate_ids), Recipe.is_published.is_(True))
-        .options(selectinload(Recipe.recipe_ingredients).joinedload(RecipeIngredient.ingredient))
-        .order_by(Recipe.created_at.desc(), Recipe.id.desc())
-    ).all()
-    if not recipes:
-        return [], [], 0
-
-    recipe_map = {int(recipe.id): recipe for recipe in recipes}
-    translation_rows = db.scalars(
-        select(RecipeTranslation).where(
-            RecipeTranslation.recipe_id.in_(candidate_ids),
-            RecipeTranslation.language.in_(target_languages),
-        )
-    ).all()
-    existing_by_key = {(int(row.recipe_id), row.language): row for row in translation_rows}
-
-    items: list[dict[str, Any]] = []
-    metadata: list[dict[str, Any]] = []
-    recipes_with_items: set[int] = set()
-
-    for recipe_id in candidate_ids:
-        recipe = recipe_map.get(int(recipe_id))
-        if not recipe:
-            continue
-        payload = build_recipe_source_payload(recipe)
-        source_hash = build_source_hash(payload)
-        for language in target_languages:
-            existing = existing_by_key.get((int(recipe.id), language))
-            if normalized_mode == "missing" and existing is not None:
-                continue
-            if normalized_mode == "stale" and (existing is None or not existing.stale):
-                continue
-            external_id = _build_batch_external_id(recipe.id, language, source_hash)
-            items.append(
-                {
-                    "external_id": external_id,
-                    "source_lang": source_lang,
-                    "source_language": source_lang,
-                    "target_lang": language,
-                    "target_language": language,
-                    "payload": payload,
-                    "content": payload,
-                }
-            )
-            metadata.append(
-                {
-                    "external_id": external_id,
-                    "recipe_id": int(recipe.id),
-                    "language": language,
-                    "source_hash": source_hash,
-                }
-            )
-            recipes_with_items.add(int(recipe.id))
-    return items, metadata, len(recipes_with_items)
+    return _impl(db, mode=mode, limit=limit)
 
 
 def start_translation_batch_job(
@@ -974,91 +753,27 @@ def start_translation_batch_job(
     limit: int | None,
     admin_id: int,
 ) -> TranslationBatchJob:
-    if not can_translate():
-        raise ValueError("TRANSLATEAPI_ENABLED ist deaktiviert.")
-    runtime_settings = get_settings()
-    if not (runtime_settings.translateapi_api_key or "").strip():
-        raise ValueError("TRANSLATEAPI_API_KEY ist nicht gesetzt.")
+    from app.translation_batch_service import start_translation_batch_job as _impl
 
-    normalized_mode = "stale" if str(mode).strip().lower() == "stale" else "missing"
-    items, metadata, recipe_count = _prepare_batch_items(db, mode=normalized_mode, limit=limit)
-    if not items:
-        raise ValueError("Keine passenden veroeffentlichten Rezepte fuer diesen Batch-Run gefunden.")
-
-    api_result = submit_translateapi_batch_request(items)
-    job = TranslationBatchJob(
-        external_job_id=api_result.external_job_id,
-        mode=normalized_mode,
-        status=api_result.status,
-        requested_recipe_count=recipe_count,
-        total_items=len(items),
-        completed_items=0,
-        created_items=0,
-        updated_items=0,
-        skipped_items=0,
-        error_count=0,
-        error_message=None,
-        items_json=json.dumps(metadata, ensure_ascii=False),
-        requested_by_admin_id=admin_id,
-        started_at=utc_now(),
-        finished_at=None,
-        last_polled_at=None,
-    )
-    db.add(job)
-    db.flush()
-    return job
+    return _impl(db, mode=mode, limit=limit, admin_id=admin_id)
 
 
 def get_recent_translation_jobs(db: Session, limit: int = 20) -> list[TranslationBatchJob]:
-    safe_limit = max(1, min(int(limit), 200))
-    return db.scalars(select(TranslationBatchJob).order_by(TranslationBatchJob.created_at.desc()).limit(safe_limit)).all()
+    from app.translation_batch_service import get_recent_translation_jobs as _impl
+
+    return _impl(db, limit=limit)
 
 
 def find_translation_batch_job(db: Session, job_id: str) -> TranslationBatchJob | None:
-    token = str(job_id or "").strip()
-    if not token:
-        return None
-    if token.isdigit():
-        found = db.scalar(select(TranslationBatchJob).where(TranslationBatchJob.id == int(token)))
-        if found:
-            return found
-    return db.scalar(select(TranslationBatchJob).where(TranslationBatchJob.external_job_id == token))
+    from app.translation_batch_service import find_translation_batch_job as _impl
+
+    return _impl(db, job_id)
 
 
 def _parse_result_payload(item: dict[str, Any]) -> dict[str, str]:
-    candidates = [
-        item.get("translated_payload"),
-        item.get("translation"),
-        item.get("result"),
-        item.get("output"),
-        item.get("payload"),
-        item.get("content"),
-    ]
-    for candidate in candidates:
-        if isinstance(candidate, dict):
-            if isinstance(candidate.get("content"), dict):
-                candidate = candidate["content"]
-            return {
-                "title": str(candidate.get("title") or candidate.get("name") or "").strip(),
-                "description": str(candidate.get("description") or candidate.get("summary") or "").strip(),
-                "instructions": str(candidate.get("instructions") or candidate.get("steps") or "").strip(),
-                "ingredients_text": str(candidate.get("ingredients_text") or candidate.get("ingredients") or "").strip(),
-            }
-        if isinstance(candidate, str) and candidate.strip():
-            text = candidate.strip()
-            return {
-                "title": text,
-                "description": text,
-                "instructions": text,
-                "ingredients_text": "",
-            }
+    from app.translation_batch_service import _parse_result_payload as _impl
 
-    return {
-        "title": str(item.get("title") or "").strip(),
-        "description": str(item.get("description") or "").strip(),
-        "instructions": str(item.get("instructions") or "").strip(),
-        "ingredients_text": str(item.get("ingredients_text") or "").strip(),
-    }
+    return _impl(item)
 
 
 def apply_translateapi_job_results(
@@ -1066,94 +781,9 @@ def apply_translateapi_job_results(
     job: TranslationBatchJob,
     payload: dict[str, Any],
 ) -> tuple[int, int, int, list[str]]:
-    try:
-        metadata_items = json.loads(job.items_json or "[]")
-    except json.JSONDecodeError:
-        metadata_items = []
-    by_external_id = {
-        str(item.get("external_id") or "").strip(): item
-        for item in metadata_items
-        if isinstance(item, dict) and str(item.get("external_id") or "").strip()
-    }
-    if not by_external_id:
-        return 0, 0, 0, ["Job-Metadaten fehlen oder sind ungueltig."]
+    from app.translation_batch_service import apply_translateapi_job_results as _impl
 
-    recipe_ids = sorted({int(item.get("recipe_id")) for item in by_external_id.values() if str(item.get("recipe_id", "")).isdigit()})
-    recipes = db.scalars(
-        select(Recipe)
-        .where(Recipe.id.in_(recipe_ids), Recipe.is_published.is_(True))
-        .options(selectinload(Recipe.recipe_ingredients).joinedload(RecipeIngredient.ingredient))
-    ).all()
-    recipe_map = {int(recipe.id): recipe for recipe in recipes}
-
-    target_languages = sorted({str(item.get("language") or "").strip() for item in by_external_id.values() if str(item.get("language") or "").strip()})
-    existing_rows = db.scalars(
-        select(RecipeTranslation).where(
-            RecipeTranslation.recipe_id.in_(recipe_ids),
-            RecipeTranslation.language.in_(target_languages),
-        )
-    ).all()
-    existing_map = {(int(row.recipe_id), row.language): row for row in existing_rows}
-
-    created = 0
-    updated = 0
-    skipped = 0
-    errors: list[str] = []
-
-    for result in _extract_result_items(payload):
-        external_id = str(result.get("external_id") or result.get("id") or result.get("item_id") or "").strip()
-        if not external_id:
-            skipped += 1
-            errors.append("Result item ohne external_id uebersprungen.")
-            continue
-        mapping = by_external_id.get(external_id)
-        if not mapping:
-            skipped += 1
-            continue
-
-        recipe_id = _to_int(mapping.get("recipe_id"), 0)
-        language = str(mapping.get("language") or "").strip()
-        source_hash = str(mapping.get("source_hash") or "").strip()
-        recipe = recipe_map.get(recipe_id)
-        if not recipe or not language:
-            skipped += 1
-            continue
-
-        source_payload = build_recipe_source_payload(recipe)
-        translated_payload = _parse_result_payload(result)
-        title_value = translated_payload["title"] or source_payload["title"]
-        description_value = translated_payload["description"] or source_payload["description"]
-        instructions_value = translated_payload["instructions"] or source_payload["instructions"]
-        ingredients_value = translated_payload["ingredients_text"] or source_payload["ingredients_text"]
-
-        row = existing_map.get((recipe_id, language))
-        if row is None:
-            row = RecipeTranslation(
-                recipe_id=recipe_id,
-                language=language,
-                title=title_value[:255],
-                description=description_value,
-                instructions=instructions_value,
-                ingredients_text=ingredients_value,
-                source_hash=source_hash or build_source_hash(source_payload),
-                stale=False,
-                quality_flag=OK_FLAG,
-            )
-            db.add(row)
-            existing_map[(recipe_id, language)] = row
-            created += 1
-            continue
-
-        row.title = title_value[:255]
-        row.description = description_value
-        row.instructions = instructions_value
-        row.ingredients_text = ingredients_value
-        row.source_hash = source_hash or row.source_hash
-        row.stale = False
-        row.quality_flag = OK_FLAG
-        updated += 1
-
-    return created, updated, skipped, errors
+    return _impl(db, job, payload)
 
 
 def poll_translation_batch_job(
@@ -1163,66 +793,14 @@ def poll_translation_batch_job(
     max_polls: int | None = None,
     poll_interval_seconds: float | None = None,
 ) -> TranslationBatchJob:
-    if job.status in TERMINAL_JOB_STATUSES:
-        return job
-    if not job.external_job_id:
-        raise TranslateApiError("Batch-Job hat keine externe Job-ID.")
+    from app.translation_batch_service import poll_translation_batch_job as _impl
 
-    runtime_settings = get_settings()
-    poll_limit = max(1, int(max_polls or runtime_settings.translateapi_max_polls or 200))
-    poll_interval = float(
-        poll_interval_seconds if poll_interval_seconds is not None else runtime_settings.translateapi_poll_interval_seconds
+    return _impl(
+        db,
+        job,
+        max_polls=max_polls,
+        poll_interval_seconds=poll_interval_seconds,
     )
-    poll_interval = max(0.0, poll_interval)
-
-    for _ in range(poll_limit):
-        payload = fetch_translateapi_job_status(job.external_job_id)
-        top = _unwrap_payload(payload)
-        status_value = _normalize_job_status(top.get("status") if isinstance(top, dict) else None)
-        total_value, completed_value = _extract_progress(payload, total_default=job.total_items, completed_default=job.completed_items)
-        error_messages = _extract_errors(payload)
-
-        job.status = status_value
-        if total_value > 0:
-            job.total_items = total_value
-        if completed_value > 0:
-            upper_bound = max(job.total_items, completed_value)
-            job.completed_items = min(completed_value, upper_bound)
-        job.last_polled_at = utc_now()
-        if error_messages:
-            job.error_count = len(error_messages)
-            job.error_message = " | ".join(error_messages)[:2000]
-
-        if status_value == "completed":
-            created, updated, skipped, apply_errors = apply_translateapi_job_results(db, job, payload)
-            job.created_items = created
-            job.updated_items = updated
-            job.skipped_items = skipped
-            if apply_errors:
-                job.error_count = max(job.error_count, len(apply_errors))
-                combined = (job.error_message or "") + " | " + " | ".join(apply_errors)
-                job.error_message = combined.strip(" |")[:2000]
-            if job.total_items <= 0:
-                job.total_items = created + updated + skipped
-            if job.completed_items <= 0:
-                job.completed_items = job.total_items
-            job.finished_at = utc_now()
-            db.flush()
-            return job
-
-        if status_value in {"failed", "cancelled"}:
-            job.finished_at = utc_now()
-            db.flush()
-            return job
-
-        db.flush()
-        if poll_interval > 0:
-            time.sleep(poll_interval)
-
-    job.status = "timeout"
-    job.finished_at = utc_now()
-    db.flush()
-    return job
 
 
 def _before_flush_mark_stale(session: Session, flush_context: Any, instances: Any) -> None:
@@ -1261,47 +839,83 @@ def _after_flush_collect_new_published(session: Session, flush_context: Any) -> 
             pending_ids.add(int(recipe.id))
 
 
-def _after_commit_auto_translate(session: Session) -> None:
+def _prepare_post_commit_auto_translate_context(
+    session: Session,
+) -> tuple[list[int], str, list[str], TranslationProvider, Any] | None:
     recipe_ids = session.info.pop(AUTO_TRANSLATION_RECIPE_IDS_KEY, set())
     if not recipe_ids:
-        return
+        return None
     if not should_auto_translate_on_publish():
-        return
+        return None
 
-    source_lang = get_source_language()
     target_languages = get_target_languages()
     if not target_languages:
-        return
+        return None
     provider = get_translation_provider()
     bind = session.get_bind()
     if bind is None:
+        return None
+    source_lang = get_source_language()
+    return sorted(int(recipe_id) for recipe_id in recipe_ids), source_lang, target_languages, provider, bind
+
+
+def _run_post_commit_auto_translate_write_phase(
+    auto_session: Session,
+    *,
+    recipe_ids: list[int],
+    source_lang: str,
+    target_languages: list[str],
+    provider: TranslationProvider,
+) -> None:
+    for recipe_id in recipe_ids:
+        recipe = auto_session.scalar(
+            select(Recipe)
+            .where(Recipe.id == recipe_id, Recipe.is_published.is_(True))
+            .options(selectinload(Recipe.recipe_ingredients).joinedload(RecipeIngredient.ingredient))
+        )
+        if not recipe:
+            continue
+        source_hash, _ = mark_recipe_translations_stale_if_needed(auto_session, recipe)
+        translate_recipe_languages(
+            auto_session,
+            recipe,
+            target_languages,
+            source_lang=source_lang,
+            provider=provider,
+            source_hash=source_hash,
+            only_missing=True,
+            only_stale=False,
+        )
+
+
+def _finalize_post_commit_auto_translate_session(auto_session: Session, *, failed: bool) -> None:
+    if failed:
+        auto_session.rollback()
         return
+    auto_session.commit()
+
+
+def _after_commit_auto_translate(session: Session) -> None:
+    context = _prepare_post_commit_auto_translate_context(session)
+    if not context:
+        return
+    recipe_ids, source_lang, target_languages, provider, bind = context
+
     auto_session_factory = sessionmaker(bind=bind, autoflush=False, autocommit=False)
     auto_session = auto_session_factory()
+    failed = False
     try:
-        for recipe_id in sorted(recipe_ids):
-            recipe = auto_session.scalar(
-                select(Recipe)
-                .where(Recipe.id == recipe_id, Recipe.is_published.is_(True))
-                .options(selectinload(Recipe.recipe_ingredients).joinedload(RecipeIngredient.ingredient))
-            )
-            if not recipe:
-                continue
-            source_hash, _ = mark_recipe_translations_stale_if_needed(auto_session, recipe)
-            translate_recipe_languages(
-                auto_session,
-                recipe,
-                target_languages,
-                source_lang=source_lang,
-                provider=provider,
-                source_hash=source_hash,
-                only_missing=True,
-                only_stale=False,
-            )
-        auto_session.commit()
+        _run_post_commit_auto_translate_write_phase(
+            auto_session,
+            recipe_ids=recipe_ids,
+            source_lang=source_lang,
+            target_languages=target_languages,
+            provider=provider,
+        )
     except Exception:
-        auto_session.rollback()
+        failed = True
     finally:
+        _finalize_post_commit_auto_translate_session(auto_session, failed=failed)
         auto_session.close()
 
 
